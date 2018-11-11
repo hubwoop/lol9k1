@@ -1,0 +1,74 @@
+{% extends "layout.html" %}
+{% block body %}
+  <h2>{{ game_row.name }} - tourney creation - <span id="fetched-date"></span></h2>
+  {% if previous_day or next_day %}
+    <form method="post">
+      <input class="btn btn-primary" style="font-size: 1.2em" {% if not previous_day %} disabled {% endif %}
+             type="submit" formaction="{{ url_for("create_tournament", game=game_row.slug, fetch_date=previous_day) }}"
+             name="<" value="👈">
+      <input class="btn btn-primary" style="font-size: 1.2em" type="submit" {% if not next_day %} disabled {% endif %}
+             formaction="{{ url_for("create_tournament", game=game_row.slug, fetch_date=next_day) }}" name=">"
+             value="👉">
+    </form>
+  {% endif %}
+  <div class="timetable"></div>
+
+  <form action="{{ url_for('create_tournament', game=game_row.slug) }}" method=post>
+    <div class="row">
+      <div class="col">
+        <label for="start">Start</label>
+        <input type="datetime-local" min="{{ party_start }}" max="{{ party_end }}" required name="start"
+               class="form-control" id="start">
+        <small class="form-text text-muted">
+          Party Start: <span id="party-start"></span>
+        </small>
+      </div>
+      <div class="col">
+        <label for="end">End</label>
+        <input type="datetime-local" min="{{ party_start }}" max="{{ party_end }}" required name="end"
+               class="form-control" id="end">
+        <small class="form-text text-muted">
+          Party End: <span id="party-end"></span>
+        </small>
+      </div>
+      <div class="col">
+        <label for="mode">Mode</label>
+        <select name="mode" id="mode" class="form-control">
+          <option value="1">Single Elimination</option>
+          <option value="2">Double Elimination</option>
+        </select>
+      </div>
+    </div>
+    <div class="row justify-content-end">
+      <div class="col-auto">
+        <input type="hidden" name="redirect" value="{{ fetched_date }}">
+        <button type="submit" class="btn btn-primary">Create!</button>
+      </div>
+    </div>
+  </form>
+  <script>
+      const isChromium = window.chrome;
+      const winNav = window.navigator;
+      const vendorName = winNav.vendor;
+      const isOpera = typeof window.opr !== "undefined";
+      const isIEedge = winNav.userAgent.indexOf("Edge") > -1;
+      const isIOSChrome = winNav.userAgent.match("CriOS");
+
+      if (isIOSChrome) {
+          // is Google Chrome on IOS
+      } else if (
+          isChromium !== null &&
+          typeof isChromium !== "undefined" &&
+          vendorName === "Google Inc." &&
+          isOpera === false &&
+          isIEedge === false
+      ) {
+          // is Google Chrome
+      } else {
+          alert("Please use this page with chrome only.");
+          window.location.replace("{{ url_for("game_detail", game=game_row.slug) }}");
+      }
+  </script>
+  {% include 'schedule-js.html' %}
+{% endblock %}
+

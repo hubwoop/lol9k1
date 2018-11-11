@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+{% block body %}
+  <h2>Content of the config table:</h2>
+
+  <table border="1">
+  <thead>
+  <tr>
+    <td style="padding: 5px">Key</td>
+    <td style="padding: 5px">Value</td>
+  </tr>
+  </thead>
+  <tbody style="border: 1px grey">
+    {% for config_entry in config_rows %}
+      <tr>
+        <td style="padding: 5px">{{ config_entry.key }}</td>
+        <td style="padding: 5px">{{ config_entry.value }}</td>
+      </tr>
+    {% else %}
+      <tr>
+        <td colspan="2">Nothing configured :(</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+  </table>
+  <h3>Default Values</h3>
+  <form method="post" action="{{ url_for('administration') }}">
+    <label for="date_start">Start Date</label>
+    <input id="date_start" type="datetime-local" name="date_start"
+           {% if event_start_date %}value="{{ event_start_date }}"{% endif %}
+           required>
+    <label for="date_end">End Date</label>
+    <input id="date_end" type="datetime-local" name="date_end"
+           {% if event_end_date %}value="{{ event_end_date }}"{% endif %}
+           required>
+    <input type="submit">
+  </form>
+
+{% endblock %}

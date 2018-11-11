@@ -1,0 +1,165 @@
+{% extends "layout.html" %}
+{% block body %}
+  {% if game_rows or request.args.get('not_voted') == 'True' %}
+    <h2>Spiele</h2>
+    <div class="row gameTableHead" id="titleRow">
+      <div class="col-2">Name</div>
+      <div class="col-2">Max Players</div>
+      <div class="col-4">Description</div>
+      <div class="col-2">
+        {% if request.args.get('order_by_score') == 'True' %}
+          <a href="/">Points ❌</a>️
+      {% else %}
+          <a href="?order_by_score=True">Points ↓</a>
+      {% endif %}
+      </div>
+      <div class="col-2">Vote<br>
+        {% if request.args.get('not_voted') == 'True' %}
+          <a href="/">All</a> / Without vote
+        {% else %}
+          All / <a href="?not_voted=True">Without vote</a>
+        {% endif %}
+      </div>
+    </div>
+    <hr>
+  {% endif %}
+  <div class="gameTable">
+    {% for game_row in game_rows %}
+      <div class="row gameTableRow" id="gameRow-{{ game_row.id }}">
+        <div class="col-md-2 col-sm-12 textCol">
+          <a class="gameLink" href="/game/{{ game_row.slug }}">{{ game_row.name }}</a>
+          <br>
+          <span style="font-size: small">Addded by: {{ game_row.added_by_user }}</span>
+          {% if session.get('is_admin', None) %}
+            <br>
+            <span style="font-size: small"><a
+                href="{{ url_for('delete_game', game_id=game_row.id) }}">Remove</a></span>
+          {% endif %}
+        </div>
+        <div class="col-md-2 col-sm-12">
+          <span class="onSmallOnly">Max Spieler: </span>{{ game_row.max_players if game_row.max_players != None }}
+        </div>
+        <div class="col-md-4 col-sm-12 textCol">
+          {% if game_row.no_drm or game_row.available or game_row.low_spec %}
+            <div class="plusPoints">
+              {% if game_row.no_drm %}
+                <img class="bonusIcon" src="{{ url_for('static', filename='img/drm_free.png') }}" data-toggle="tooltip"
+                     data-placement="top" title="DRM-Free! No copyright protection.">
+              {% endif %}
+              {% if game_row.low_spec %}
+                <img class="bonusIcon" src="{{ url_for('static', filename='img/low_spec.png') }}" data-toggle="tooltip"
+                     data-placement="top" title="Runs on weak machines.">
+              {% endif %}
+              {% if game_row.available %}
+                <img class="bonusIcon" src="{{ url_for('static', filename='img/available.png') }}" data-toggle="tooltip"
+                     data-placement="top" title="A game that everybody has anyways.">
+              {% endif %}
+            </div><br>
+          {% endif %}
+          {% if game_row.description %}
+            <span class="onSmallOnly">Description: </span>{{ game_row.description }}
+          {% endif %}
+
+        </div>
+        <div class="col-md-2 col-sm-12 scoreRow">
+          <span class="onSmallOnly">Points: </span>{% if game_row.score %}{{ game_row.score }}{% else %}0{% endif %}
+        </div>
+        <div class="col-md-2 col-sm-12">
+          <div class="voteContainer">
+            <form action="{{ url_for('game_vote', game=game_row.id, vote=+1) }}" method=post
+                  style="display: inline;">
+              <button type="submit" class="btn btn-success" value="+1"
+                      {% if game_row.this_sessions_user_vote == 1 %}disabled{% endif %}>👍
+              </button>
+            </form>
+            <form action="{{ url_for('game_vote', game=game_row.id, vote=-1) }}" method=post style="display: inline;">
+              <button type="submit" class="btn btn-danger" value="-1"
+                      {% if game_row.this_sessions_user_vote == -1 %}disabled{% endif %}>👎
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      <hr>
+    {% else %}
+      <em>No games added yet.</em>
+      <hr>
+    {% endfor %}
+
+  </div>
+
+  <!-- https://bootsnipp.com/forms -->
+  <form class="form-horizontal" action="{{ url_for('add_game') }}" method=post id="addGameForm">
+    <fieldset>
+
+      <!-- Form Name -->
+      <legend>Add Game</legend>
+
+      <!-- Text input-->
+      <div class="form-group">
+        <label class="col-md-4 control-label" for="title">Title*</label>
+        <div class="col-md-4">
+          <input id="gameTitle" name="title" type="text" placeholder="PacMan" class="form-control input-md" required>
+          <small class="form-text text-muted">The name of the game.</small>
+        </div>
+      </div>
+
+      <!-- Text input-->
+      <div class="form-group">
+        <label class="col-md-4 control-label" for="max_players">Max Players</label>
+        <div class="col-md-4">
+          <input id="max_players" name="max_players" type=number class="form-control input-md">
+          <small class="form-text text-muted">How many players can play at the same time together?</small>
+        </div>
+      </div>
+
+      <!-- Textarea -->
+      <div class="form-group">
+        <label class="col-md-4 control-label" for="description">Description</label>
+        <div class="col-md-4">
+          <textarea class="form-control" id="description" name="description"></textarea>
+        </div>
+      </div>
+
+      <!-- Multiple Checkboxes -->
+      <div class="form-group plusPointForm">
+        <label class="col-md-4 control-label" for="bonuses">Plus points</label>
+        <div class="col-md-4">
+          <div class="checkbox">
+            <label for="Pluspunkte-0" class="noSelect">
+              <input type="checkbox" name="no_drm" id="Pluspunkte-0">
+              <img class="bonusIcon grayScale" src="{{ url_for('static', filename='img/drm_free.png') }}"
+                   data-toggle="tooltip" data-placement="top" title="DRM-Free! No copyright protection.">
+              DRM-Free! No copyright protection.
+            </label>
+          </div>
+          <div class="checkbox">
+            <label for="Pluspunkte-1" class="noSelect">
+              <input type="checkbox" name="available" id="Pluspunkte-1">
+              <img class="bonusIcon grayScale" src="{{ url_for('static', filename='img/available.png') }}"
+                   data-toggle="tooltip" data-placement="top" title="A game that everybody has anyways.">
+              A game that everybody has anyways.
+            </label>
+          </div>
+          <div class="checkbox">
+            <label for="Pluspunkte-2" class="noSelect">
+              <input type="checkbox" name="low_spec" id="Pluspunkte-2">
+              <img class="bonusIcon grayScale" src="{{ url_for('static', filename='img/low_spec.png') }}"
+                   data-toggle="tooltip" data-placement="top" title="Runs on weak machines.">
+              Runs on weak machines.
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Button -->
+      <div class="form-group">
+        <div class="col-md-4">
+          <button class="btn btn-primary" type=submit>Add!</button>
+        </div>
+      </div>
+
+    </fieldset>
+  </form>
+
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "layout.html" %}
+{% block body %}
+    <video id="bgVideo" loop autoplay muted>
+        <source src="{{ video_uri }}" type="video/mp4">
+    </video>
+    <div class="col-md-4">
+        <form action="{{ url_for('login') }}" method=post>
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" class="form-control"
+                       placeholder="yourFancyName" name=username>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" class="form-control" placeholder="Password" name=password>
+            </div>
+            <button type="submit" class="btn btn-primary">Login</button>
+        </form>
+        <a href="{{ url_for('register') }}">Register</a>
+    <button onclick="toggleSound()" id="volumeToggle">🔊</button>
+    </div>
+
+    <script>
+        var video = document.getElementById("bgVideo");
+        var soundButton = document.getElementById("volumeToggle");
+        function toggleSound() {
+            if (video.muted) {
+                video.muted = false;
+                soundButton.innerText = '🔈';
+            } else {
+                video.muted = true;
+                soundButton.innerText = '🔊';
+            }
+        }
+    </script>
+{% endblock %}

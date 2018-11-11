@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% block body %}
+  <h2>Schedule - <span id="fetched-date"></span></h2>
+    {% if previous_day or next_day %}
+    <form method="post">
+      <input class="btn btn-primary" style="font-size: 1.2em" {% if not previous_day %} disabled {% endif %}
+          type="submit" formaction="{{ url_for("schedule", fetch_date=previous_day) }}" name="<" value="👈">
+      <input class="btn btn-primary" style="font-size: 1.2em"  type="submit" {% if not next_day %} disabled {% endif %}
+             formaction="{{ url_for("schedule", fetch_date=next_day) }}" name=">" value="👉">
+    </form>
+  {% endif %}
+  <div class="timetable"></div>
+  Party start: <span id="party-start"></span> | Party end: <span id="party-end"></span>
+  {% include 'schedule-js.html' %}
+{% endblock %}

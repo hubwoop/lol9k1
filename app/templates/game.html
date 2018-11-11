@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% block body %}
+  <h2>{{ game_row.name }}</h2>
+
+  {% if game_row.no_drm or game_row.available or game_row.low_spec %}
+    <div class="plusPoints">
+
+      {% if game_row.no_drm %}
+        <img class="bonusIcon" src="{{ url_for('static', filename='img/drm_free.png') }}" data-toggle="tooltip"
+             data-placement="top" title="DRM-Free! No copyright protection.">
+      {% endif %}
+
+      {% if game_row.low_spec %}
+        <img class="bonusIcon" src="{{ url_for('static', filename='img/low_spec.png') }}" data-toggle="tooltip"
+             data-placement="top" title="Runs on weak machines.">
+      {% endif %}
+
+      {% if game_row.available %}
+        <img class="bonusIcon" src="{{ url_for('static', filename='img/available.png') }}" data-toggle="tooltip"
+             data-placement="top" title="A game that everybody has anyways.">
+      {% endif %}
+
+    </div><br>
+  {% endif %}
+  {% if game_row.description %}
+    <p>Description: {{ game_row.description }}</p>
+  {% endif %}
+  {% for event in events %}
+    <ul>
+      <li>
+        <a href="{{ url_for('event', event_id=event[0]) }}">Event #{{ event[0] }} - {{ event[2]|strftime|safe }} - {{ event[3]|strftime|safe }}</a> - Created by {{ event[4] }}
+        {% if session.get('is_admin', None) %}
+          - <span style="font-size: small">
+          <a href="{{ url_for('delete_event', event_id=event[0]) }}">
+          Remove
+          </a>
+        </span>
+        {% endif %}
+      </li>
+    </ul>
+  {% else %}
+    <p>No Tournament scheduled for {{ game_row.name }} ({{ game_row.id }})!</p>
+  {% endfor %}
+  <a href="{{ url_for('create_tournament', game=game_row.slug) }}" class="btn btn-primary">Create a tournament!</a>
+
+{% endblock %}

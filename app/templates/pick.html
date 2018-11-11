@@ -1,0 +1,326 @@
+{% extends "layout.html" %}
+{% block body %}
+  <h2>
+    <a href="{{ url_for('game_detail', game=event.game_slug) }}">{{ event.game }}</a> - Tourney by
+    {{ event.creator }} (Event #{{ event_id }})
+  </h2>
+  <div class="row">
+    <div class="col-6">
+      <ul id="state">
+      </ul>
+    </div>
+    <div class="col-6">
+      <ul id="possible-teammates">
+      </ul>
+      <button onclick="skip_pick()" class="btn btn-sm btn-primary" id="skipper">Skip</button>
+    </div>
+  </div>
+  {% if session.get('user_id') == event.creator_id or session.get('is_admin') %}
+    <div class="row">
+      <div class="col-auto">
+        <h3>Tourney owner options:</h3>
+        <a href="{{ url_for('stop_pick_phase', event_id=event_id) }}" class="btn btn-primary">End pick phase</a>
+        <button class="btn btn-warning btn-sm" onclick="skip_pick()">Force skip</button>
+      </div>
+    </div>
+  {% endif %}
+
+
+
+  <script>
+
+
+      let current_state;
+      let currently_possible_users;
+      const event_id = {{ event_id|safe }};
+      let names_beeing_edited = [];
+      let leading = [];
+      fetch_teams_user_is_captain_of();
+
+      refresh_view();
+      setInterval(refresh_view, 500);
+
+      function refresh_view() {
+          update_possible_teammates();
+          update_state();
+      }
+
+
+      function initialize_team_state(fetched_state) {
+          current_state = fetched_state;
+          fetched_state.teams.forEach(function (team) {
+              let teams_list_item = document.createElement("li");
+              teams_list_item.id = `team-${team.team_id}`;
+              let team_name = document.createElement('h5');
+              let team_name_title;
+              if (team.name == null) {
+                  team_name_title = `Team #${team.team_id}`;
+              } else {
+                  team_name_title = `Team ${team.name}`;
+              }
+              team_name_title = document.createTextNode(team_name_title);
+              team_name.onclick = function () {
+                  listenForDoubleClick(team_name, team.team_id)
+              };
+              team_name.appendChild(team_name_title);
+              teams_list_item.appendChild(team_name);
+              let team_members_list = document.createElement("ul");
+              team.players.forEach(function (team_member) {
+                  let team_member_item = document.createElement("li");
+                  let team_member_item_content;
+                  if (team_member === team.captain) {
+                      team_member_item_content = document.createTextNode(`${team_member} 👑`);
+                  }
+                  else {
+                      team_member_item_content = document.createTextNode(team_member);
+                  }
+                  team_member_item.appendChild(team_member_item_content);
+                  team_members_list.appendChild(team_member_item);
+                  teams_list_item.appendChild(team_members_list);
+              });
+
+              if (team.team_id === fetched_state.pick_details.currently_picking) {
+                  teams_list_item.classList.add('isPicking');
+                  if (leading.includes(team.team_id)) {
+                      console.log("It's your turn.");
+                      enable_possible_teammate_picking();
+                  } else {
+                      console.log("It's not your turn.");
+                      disable_possible_teammate_picking();
+                  }
+              }
+
+              document.getElementById('state').appendChild(teams_list_item);
+          })
+      }
+
+      function update_state() {
+          fetch('{{ url_for('get_state_api', event_id=event_id) }}')
+              .then(function (response) {
+                  return response.json();
+              })
+              .then(function (fetched_state) {
+                  console.log(fetched_state);
+                  if (JSON.stringify(fetched_state) !== JSON.stringify(current_state)) {
+                      if (fetched_state.state !== "pickphase") {
+                          window.location.assign('{{ url_for('event', event_id=event_id)}}');
+                      }
+                      if (current_state == null) {
+                          initialize_team_state(fetched_state);
+                          console.log("initialized team state")
+                      } else {
+                          if (JSON.stringify(fetched_state.teams) !== JSON.stringify(current_state.teams)) {
+                              fetched_state.teams.forEach(function (fetched_team) {
+                                  let current_team = current_state.teams.filter(function (team) {
+                                      return team.team_id === fetched_team.team_id
+                                  });
+                                  current_team = current_team[0]; // since we use unique IDs this should be safe
+                                  if (JSON.stringify(current_team.players) !== JSON.stringify(fetched_team.players)) {
+                                      // https://stackoverflow.com/a/33034768
+                                      let removed_teammates = current_team.players.filter(x => !fetched_team.players.includes(x));
+                                      let added_teammates = fetched_team.players.filter(x => !current_team.players.includes(x));
+                                      if (removed_teammates.length > 0) {
+                                          //removed_teammates.forEach(); // TODO
+                                      }
+                                      if (added_teammates.length > 0) {
+                                          added_teammates.forEach(function (teammates_name) {
+                                              let team_member_item = document.createElement("li");
+                                              let team_member_item_content = document.createTextNode(teammates_name);
+                                              team_member_item.appendChild(team_member_item_content);
+                                              let teams_list_item = document.getElementById(`team-${fetched_team.team_id}`);
+                                              let teams_list = teams_list_item.getElementsByTagName('ul')[0];
+                                              teams_list.appendChild(team_member_item);
+                                              console.log(`Team ${fetched_team.team_id} has a new player: ${teammates_name}`)
+                                          });
+                                      }
+                                  }
+                              });
+                              console.log("teams changed")
+                          }
+                          if (JSON.stringify(fetched_state.pick_details !== JSON.stringify(current_state.pick_details))) {
+
+                              let picking_team = document.getElementsByClassName('isPicking')[0];
+                              picking_team.classList.remove('isPicking');
+
+                              picking_team = document.getElementById(`team-${fetched_state.pick_details.currently_picking}`);
+                              picking_team.classList.add('isPicking');
+                              if (leading.includes(fetched_state.pick_details.currently_picking)) {
+                                  console.log("Du bist dran.");
+                                  enable_possible_teammate_picking();
+                              } else {
+                                  console.log("Du bist nicht dran.");
+                                  disable_possible_teammate_picking();
+                              }
+                              console.log("pick details changed");
+                          }
+                          current_state = fetched_state;
+                          console.log("updated state.")
+                      }
+                  }
+              });
+      }
+
+      function add_to_possible_teammate_list(user) {
+
+          function pick_button() {
+              let pick_user_button = document.createElement('button');
+              let pick_user_button_text = document.createTextNode('❤️');
+              pick_user_button.appendChild(pick_user_button_text);
+              pick_user_button.onclick = function () {
+                  add_teammate(user.id)
+              };
+              pick_user_button.classList.add("btn", "btn-primary", "btn-sm");
+              return pick_user_button;
+          }
+
+          let user_list_item = document.createElement("li");
+          user_list_item.id = `possible-teammate-${user.id}`;
+          let item_text_content = document.createTextNode(`${user.gender} ${user.name}`);
+          user_list_item.appendChild(item_text_content);
+          user_list_item.appendChild(pick_button());
+          document.getElementById('possible-teammates').appendChild(user_list_item);
+      }
+
+      function add_teammate(user_id) {
+          fetch(`/event/${event_id}/team/${current_state.pick_details.currently_picking}/add-mate`, {
+              method: 'POST',
+              body: JSON.stringify(user_id),
+              headers: new Headers({
+                  'Content-Type': 'application/json'
+              }),
+              credentials: 'include'
+          }).then(res => res.json())
+              .catch(error => console.error('Error:', error))
+              .then(function (response) {
+                      console.log('Success:', response);
+                  }
+              );
+      }
+
+      function remove_from_possible_teammate_list(user) {
+          document.getElementById('possible-teammates')
+              .removeChild(document.getElementById(`possible-teammate-${user.id}`))
+      }
+
+      function disable_possible_teammate_picking() {
+          let possible_teammates = document.getElementById('possible-teammates');
+          let all_buttons = possible_teammates.getElementsByClassName("btn");
+          if (all_buttons.length > 0) {
+              for (let button of all_buttons) {
+                  button.disabled = true;
+              }
+          }
+          document.getElementById('skipper').disabled = true;
+      }
+
+      function enable_possible_teammate_picking() {
+          let possible_teammates = document.getElementById('possible-teammates');
+          let all_buttons = possible_teammates.getElementsByClassName("btn");
+          if (all_buttons.length > 0) {
+              for (let button of all_buttons) {
+                  button.disabled = false;
+              }
+          }
+          document.getElementById('skipper').disabled = false;
+      }
+
+      function update_possible_teammates() {
+          fetch('{{ url_for('get_possible_teammates_api', event_id=event_id) }}')
+              .then(function (response) {
+                  return response.json();
+              })
+              .then(function (fetched_users) {
+
+                  if (JSON.stringify(fetched_users) !== JSON.stringify(currently_possible_users)) {
+
+                      if (currently_possible_users == null) {
+                          console.log('init possible teammates');
+                          currently_possible_users = fetched_users;
+                          fetched_users.forEach(add_to_possible_teammate_list);
+                          return;
+                      }
+
+                      // https://stackoverflow.com/a/33034768
+                      let removed_users = currently_possible_users.filter(x => !fetched_users.includes(x));
+                      let added_users = fetched_users.filter(x => !currently_possible_users.includes(x));
+                      removed_users.forEach(remove_from_possible_teammate_list);
+                      added_users.forEach(add_to_possible_teammate_list);
+
+                      //const user_list_item = document.createElement("p");
+                      //document.getElementById('possbile-teammates').appendChild(`<li>${element.name}</li>`);
+                      currently_possible_users = fetched_users;
+                      console.log("updated possible users!");
+                      console.log(currently_possible_users)
+                  }
+              });
+      }
+
+      function listenForDoubleClick(element, team_id) {
+
+          //TODO: check if authorized...
+          if (names_beeing_edited.includes(element)) {
+              return
+          }
+          element.contentEditable = true;
+          names_beeing_edited.push(element);
+          if (element.textContent.startsWith("Team ")) {
+              element.textContent = element.textContent.slice(5); //removes the "team " prefix
+          }
+          const old_content = element.textContent;
+          let name_update_check = setInterval(function () {
+              if (document.activeElement !== element) {
+                  element.contentEditable = false;
+                  if (old_content !== element.textContent) {
+                      update_team_name(team_id, element.textContent)
+                  }
+                  clearInterval(name_update_check);
+                  names_beeing_edited = names_beeing_edited.filter(item => item !== element);
+                  element.textContent = `Team ${element.textContent}`;
+              }
+          }, 300);
+      }
+
+      function update_team_name(team_id, new_team_name) {
+          fetch(`/team/${team_id}/name`, {
+              method: 'POST',
+              body: JSON.stringify(new_team_name),
+              headers: new Headers({
+                  'Content-Type': 'application/json'
+              }),
+              credentials: 'include'
+          }).then(res => res.json())
+              .catch(error => console.error('Error:', error))
+              .then(response => console.log('Success:', response));
+      }
+
+      function fetch_teams_user_is_captain_of() {
+          fetch(`/event/${event_id}/captain-of`, {
+              method: 'POST',
+              headers: new Headers({
+                  'Content-Type': 'application/json'
+              }),
+              credentials: 'include'
+          }).then(res => res.json())
+              .catch(error => console.error('Error:', error))
+              .then(function (response) {
+                  leading = response;
+                  console.log('Success leading teams:', response)
+              });
+      }
+
+      function skip_pick() {
+          fetch(`/event/${event_id}/team/${current_state.pick_details.currently_picking}/skip`, {
+              method: 'POST',
+              headers: new Headers({
+                  'Content-Type': 'application/json'
+              }),
+              credentials: 'include'
+          }).then(res => res.json())
+              .catch(error => console.error('Error:', error))
+              .then(function (response) {
+                      console.log('Success:', response);
+                  }
+              );
+      }
+  </script>
+{% endblock %}

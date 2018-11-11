@@ -1,0 +1,136 @@
+.voteContainer {
+    display: flex;
+}
+
+.bonusIcon {
+    height: 2rem;
+    margin-right: 1em;
+}
+
+input[type=checkbox]:checked ~ img {
+    filter: grayscale(0%);
+}
+
+.grayScale {
+    filter: grayscale(100%);
+}
+
+.plusPointForm input[type=checkbox] {
+    display: none;
+}
+
+#titleRow {
+    font-style: italic;
+    font-size: small;
+}
+
+.version {
+    font-size: small;
+}
+
+.noSelect {
+    user-select: none;
+}
+
+.textCol {
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+#bgVideo {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    min-width: 100%;
+    min-height: 100%;
+    z-index: -200;
+}
+
+#volumeToggle {
+    background: none;
+    border: none;
+    float: right;
+    font-size: 8vh;
+    line-height: 8.5vh;
+}
+
+#volumeToggle:active,
+#volumeToggle:focus,
+#volumeToggle.active {
+  background-image: none;
+  outline: 0;
+  -webkit-box-shadow: none;
+          box-shadow: none;
+}
+
+.gameLink {
+    font-size: x-large;
+}
+
+.inviteUsed {
+    text-decoration: line-through;
+}
+
+div.mainNavigation > nav > ul {
+    list-style: none;
+}
+
+div.mainNavigation > nav > ul > li {
+    display: inline;
+}
+
+div.mainNavigation > nav > ul > li::after {
+    padding-left: 0.3em;
+    content: '|';
+}
+
+div.mainNavigation > nav {
+    width: 100%;
+}
+
+div.mainNavigation > nav > ul > li:last-child {
+    float: right;
+}
+
+div.mainNavigation > nav > ul > li:nth-last-child(-n+2)::after {
+    padding-left: unset;
+    content: none;
+}
+
+.madeWithLabel {
+    display: inline-block;
+    margin-right: 0.5em;
+}
+
+.isPicking {
+    background-color: #32373c;
+}
+
+.isPicking > h5 {
+    color: white;
+}
+
+@media (min-width: 767.98px) {
+    .onSmallOnly {
+        display: none;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .gameTableHead {
+        display: none;
+        visibility: hidden;
+    }
+
+    .gameTableRow > div {
+        margin-bottom: 1em;
+    }
+
+    .plusPoints {
+        float: right;
+    }
+
+    .gameTable > div:nth-child(4n+1) {
+        background: #292f34;
+    }
+}

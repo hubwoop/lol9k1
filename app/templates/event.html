@@ -1,0 +1,140 @@
+{% extends "layout.html" %}
+{% block body %}
+  {# ---------------------------- EVENT DETAILS --------------------------------------------------------------------- #}
+  <h2>
+    <a href="{{ url_for('game_detail', game=event.game_slug) }}">{{ event.game }}</a> - Tourney by
+    {{ event.creator }} (Event #{{ event_id }})
+  </h2>
+  <hr>
+  <div class="row">
+    <div class="col-sm">
+      <h3>Beschreibung</h3>
+      {% if event.description %}
+        {{ event.description|markdown }}
+      {% else %}
+        No description yet.
+      {% endif %}
+    </div>
+    <div class="col-sm">
+      <h3>Teams</h3>
+      {% if teams %}
+        <dl>
+          {% for _, team in teams.items() %}
+            <dt>{% if team.name %}{{ team.name }}{% else %}Team #{{ team.team_id }}{% endif %}</dt>
+            {% for player in team.players %}
+              {% if player == team.captain %}
+                <dd>{{ player }} 👑</dd>
+              {% else %}
+                <dd>{{ player }}</dd>
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+        </dl>
+      {% else %}
+        None so far.
+      {% endif %}
+    </div>
+    <div class="col-sm">
+      {% if event.external_url %}
+        <h3>External resource</h3>
+        <a href="{{ event.external_url }}">Bracket</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ---------------------------- EDIT EVENT -------------------------------------------------------------------------- #}
+  {% if session.get('user_id') == event.creator_id or session.get('is_admin', False) %}
+    <hr>
+    {% if session.get('is_admin', False) and session.get('user_id') != event.creator_id %}
+      {# Display a warning if an admin edits another persons event. #}
+      <div class="row">
+        <div class="col col-lg-5">
+          <div class="alert alert-warning" role="alert">
+            You're editing an event created by {{ event.creator }} as administrator.
+          </div>
+        </div>
+      </div>
+    {% endif %}
+    <div class="row">
+      <div class="col">
+        <h3>Edit event details</h3>
+        <form action="{{ url_for('event', event_id=event_id) }}" method="post">
+
+          <div class="form-group">
+            <label for="external_url">Tournament bracket URL on external website</label>
+            <input class="form-control" type="url" name="external_url" id="external_url"
+                   value="{% if event.external_url %}{{ event.external_url }}{% endif %}">
+            <small class="form-text text-muted">
+              Some suggested hosting sites:
+              <a href="https://www.bracketsninja.com/" target="_blank">bracketsninja.com</a>,
+              <a href="https://challonge.com/" target="_blank">challonge.com</a> or
+              <a href="https://www.online-brackets.com/" target="_blank">online-brackets.com</a>
+            </small>
+          </div>
+
+          <div class="form-group">
+            <label for="description">Description </label>
+            <textarea class="form-control" id="description" rows="4" name="description"
+                      style="font-family: monospace;">{% if event.description %}{{ event.description }}{% endif %}</textarea>
+            <small class="form-text text-muted">Supports <a href="https://devdocs.io/markdown/">Markdown</a></small>
+          </div>
+          <button type="submit" class="btn btn-primary">Submit</button>
+        </form>
+      </div>
+      <div class="col">
+        <h3>Choose team captains</h3>
+        {% if hasParticipants %}
+          <div class="alert alert-danger" role="alert">Alert: If you change team captains now, ALL teams must be rebuilt ¯\_(ツ)_/¯
+          </div>
+        {% endif %}
+        <form action="{{ url_for('event', event_id=event_id) }}" method="post">
+          {% for user in users %}
+            <div class="form-check">
+              <input name="checked-captains" type="checkbox" value="{{ user.id }}" id="possible-captain-{{ user.id }}"
+                  {% if user.id in captains %} checked{% endif %} class="form-check-input">
+              <label class="form-check-label" for="possible-captain-{{ user.id }}">
+                {{ user.gender|gender }} {{ user.name }}
+              </label>
+            </div>
+          {% else %}
+            No users -> No party
+          {% endfor %}
+          {% if users %}
+            <input type="hidden" name="check-captains" value="True">
+            <br>
+            <button type="submit" class="btn btn-primary">Set captains</button> {% endif %}
+        </form>
+      </div>
+      {% if teams %}
+        <div class="col">
+          <h4>Start pick phase</h4>
+          <form action="{{ url_for('event', event_id=event_id) }}" method="post">
+            <input type="hidden" name="initiate-picking" value="True">
+            <button type="submit" class="btn btn-primary">Start picking teams</button>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+    <hr>
+    <script>
+        let clicked = 0;
+
+        function doubleCheck() {
+            let deleteButton = document.getElementById('delete');
+            if (clicked > 0) {
+                window.location = '{{ url_for('delete_event', event_id=event_id) }}';
+                return;
+            }
+            alert('Are you sure you want to delete: "{{ event.game }} - Tourney by {{ event.creator }} (Event #{{ event_id }})"?\nClick delete again to confirm.');
+            clicked++;
+        }
+    </script>
+    <div class="row">
+      <div class="col">
+        <h4>Danger Zone</h4>
+        <button onclick="doubleCheck()" class="btn btn-danger btn-sm" id="delete">Delete event</button>
+      </div>
+    </div>
+  {% endif %}
+
+{% endblock %}

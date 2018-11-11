@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% block body %}
+    <h2>Your invites</h2>
+    <ul>
+        {% for invite in invites %}
+            {% if invite.used %}
+                <li class="inviteUsed">{{ invite.token }}</li>
+            {% else %}
+                <li>
+                    <form style="float: left; margin-right: 0.5em" action="{{ url_for('delete_invite', token=invite.token) }}" method="get">
+                        <button class="btn btn-danger btn-sm">❌</button>
+                    </form>
+                    <a href="{{ url_for('register') }}/{{ invite.token }}">{{ invite.token }}</a>
+                  <button onclick="toClipboard('{{ invite.token }}')" class="btn btn-primary btn-sm">Copy!
+                  </button>
+                  <input id="{{ invite.token }}" type="text" value="{{ url_for('register') }}/{{ invite.token }}"
+                         title="Token" style="display: none;">
+                </li>
+            {% endif %}
+        {% endfor %}
+    {% if invites %}
+        (Copy to clipboard requires active javascript)
+    {% endif %}
+    </ul>
+    <h2>Create invite tokens</h2>
+
+    {% if tokens_left %}
+        <p>You can create {{ tokens_left }} more tokens.</p>
+    <form action="{{ url_for('generate_invite') }}" method="get">
+        <button type="submit" class="btn btn-primary">
+            Create token!
+        </button>
+    </form>
+    {% endif %}
+
+    <script>
+        function toClipboard(token) {
+            var copyText = document.getElementById(token);
+            copyText.style.display = "initial";
+            copyText.value = "https://" + window.location.hostname + copyText.value;
+            copyText.select();
+            document.execCommand("Copy");
+            copyText.style.display = "none";
+        }
+    </script>
+{% endblock %}

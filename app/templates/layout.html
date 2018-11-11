@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LOL 9001 - {{ page_title }}</title>
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+  <link rel=stylesheet type=text/css href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon-256.png') }}">
+
+  {% if request.path.startswith("/schedule") or request.path.startswith("/tournament/create") %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/timetablejs.css') }}">
+    <script src="{{ url_for('static', filename='js/timetable/timetable.js') }}"></script>
+  {% endif %}
+</head>
+
+<body>
+<div class=page>
+
+  <div class="container">
+    <div class="row">
+      <a href="/"><h1>LAN-PARTY ORGANIZER LOL 9001</h1></a>
+      <span class="version">
+                Initial commit :)
+            </span>
+    </div>
+
+    {% if session.logged_in %}
+      <hr>
+      Hi <span style="font-weight: bold;">{{ session.get('username') }}</span>!
+      <!-- TODO: http://jinja.pocoo.org/docs/2.10/tricks/#highlighting-active-menu-items -->
+      <div class="row mainNavigation">
+        <nav>
+          <ul>
+            <li><a href="{{ url_for('landing') }}">Home</a></li>
+            <li><a href="{{ url_for('schedule') }}">Schedule</a></li>
+            <li><a href="{{ url_for('landing', _anchor='addGameForm') }}">Add Game</a></li>
+            <li><a href="{{ url_for('invite') }}">Invite</a></li>
+            {% if session.get('is_admin', None) %}
+              <li><a href="{{ url_for('administration') }}">Administration</a></li>
+            {% endif %}
+            <li><a href="{{ url_for('logout') }}">Log Out</a></li>
+          </ul>
+        </nav>
+      </div>
+    {% endif %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="row">
+            <div class="alert alert-{{ category }}" role="alert">
+              {{ message }}
+            </div>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <hr>
+    {% block body %}
+    {% endblock %}
+    <hr>
+    {% if session.get('logged_in') %}
+      <div class="row justify-content-end" style="padding-bottom: 2em; padding-top: 2em">
+        <div class="col-auto" style="vertical-align: bottom;">
+          <span class="madeWithLabel">Built with</span>
+          <a href="https://www.jetbrains.com/pycharm/"><img
+              src="{{ url_for('static', filename='img/pycharm.svg') }}" alt="PyCharm"></a>
+          and
+          <a href="http://flask.pocoo.org/">
+            <img src="{{ url_for('static', filename='img/flask_clean_inverted.svg') }}" alt="flask" height="70px">
+          </a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+<!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+<script src="{{ url_for('static', filename='js/jquery-3.3.1.min.js') }}"></script>
+<!-- Include all compiled plugins (below), or include individual files as needed -->
+<script src="{{ url_for('static', filename='js/bootstrap.min.js') }}"></script>
+</body>
+</html>
