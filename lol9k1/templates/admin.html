@@ -23,7 +23,7 @@
   </tbody>
   </table>
   <h3>Default Values</h3>
-  <form method="post" action="{{ url_for('administration') }}">
+  <form method="post" action="{{ url_for('admin.administration') }}">
     <label for="date_start">Start Date</label>
     <input id="date_start" type="datetime-local" name="date_start"
            {% if event_start_date %}value="{{ event_start_date }}"{% endif %}

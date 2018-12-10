@@ -33,7 +33,7 @@
           {% if session.get('is_admin', None) %}
             <br>
             <span style="font-size: small"><a
-                href="{{ url_for('delete_game', game_id=game_row.id) }}">Remove</a></span>
+                href="{{ url_for('landing.delete_game', game_id=game_row.id) }}">Remove</a></span>
           {% endif %}
         </div>
         <div class="col-md-2 col-sm-12">
@@ -66,13 +66,13 @@
         </div>
         <div class="col-md-2 col-sm-12">
           <div class="voteContainer">
-            <form action="{{ url_for('game_vote', game=game_row.id, vote=+1) }}" method=post
+            <form action="{{ url_for('landing.game_vote', game=game_row.id, vote=+1) }}" method=post
                   style="display: inline;">
               <button type="submit" class="btn btn-success" value="+1"
                       {% if game_row.this_sessions_user_vote == 1 %}disabled{% endif %}>👍
               </button>
             </form>
-            <form action="{{ url_for('game_vote', game=game_row.id, vote=-1) }}" method=post style="display: inline;">
+            <form action="{{ url_for('landing.game_vote', game=game_row.id, vote=-1) }}" method=post style="display: inline;">
               <button type="submit" class="btn btn-danger" value="-1"
                       {% if game_row.this_sessions_user_vote == -1 %}disabled{% endif %}>👎
               </button>
@@ -89,7 +89,7 @@
   </div>
 
   <!-- https://bootsnipp.com/forms -->
-  <form class="form-horizontal" action="{{ url_for('add_game') }}" method=post id="addGameForm">
+  <form class="form-horizontal" action="{{ url_for('landing.add_game') }}" method=post id="addGameForm">
     <fieldset>
 
       <!-- Form Name -->

@@ -4,7 +4,7 @@
         <source src="{{ video_uri }}" type="video/mp4">
     </video>
     <div class="col-md-4">
-        <form action="{{ url_for('login') }}" method=post>
+        <form action="{{ url_for('auth.login') }}" method=post>
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" class="form-control"
@@ -16,7 +16,7 @@
             </div>
             <button type="submit" class="btn btn-primary">Login</button>
         </form>
-        <a href="{{ url_for('register') }}">Register</a>
+        <a href="{{ url_for('auth.register') }}">Register</a>
     <button onclick="toggleSound()" id="volumeToggle">🔊</button>
     </div>
 

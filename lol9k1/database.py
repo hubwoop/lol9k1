@@ -1,0 +1,73 @@
+import sqlite3
+import uuid
+
+import click
+from flask import current_app, g
+from flask.cli import with_appcontext
+
+
+def get_db():
+    if 'db' not in g:
+        g.db = sqlite3.connect(
+            current_app.config['DATABASE'],
+            detect_types=sqlite3.PARSE_DECLTYPES
+        )
+        g.db.row_factory = sqlite3.Row
+
+    return g.db
+
+
+def close_db(e=None):
+    db = g.pop('db', None)
+
+    if db is not None:
+        db.close()
+
+
+def init_db():
+    db = get_db()
+    with current_app.open_resource('schema.sql', mode='r') as f:
+        db.executescript(f.read())
+    db.commit()
+
+
+@click.command('init-db')
+@with_appcontext
+def init_db_command():
+    """Clear the existing data and create new tables."""
+    init_db()
+    click.echo('Initialized the database.')
+
+
+@click.command('create-admin')
+@with_appcontext
+def create_admin_command():
+    db = get_db()
+    token = uuid.uuid4().hex[:12]
+    db.execute('insert into invites (token, added_by) values (?, ?)', [token, 0])
+    db.commit()
+    click.echo(f'Your invite token is:\n{token}')
+
+
+def init_app(app):
+    app.teardown_appcontext(close_db)
+    app.cli.add_command(init_db_command)
+    app.cli.add_command(create_admin_command)
+
+
+def get_party_start_date() -> str:
+    db = get_db()
+    start_date_row = db.execute("select value from config where key = 'date_start'").fetchone()
+    try:
+        return start_date_row[0]
+    except TypeError:
+        return ""
+
+
+def get_party_end_date() -> str:
+    db = get_db()
+    end_date_row = db.execute("select value from config where key = 'date_end'").fetchone()
+    try:
+        return end_date_row[0]
+    except TypeError:
+        return ""

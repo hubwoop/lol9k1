@@ -1,5 +1,5 @@
-Flask>=0.12.2
-python-slugify>=1.2.5
+Flask>=1.0.0
+python-slugify>=1.2.6
 igdb-api-python>=1.0
 python-dateutil>=2.7.2
 Flask-Markdown>=0.3

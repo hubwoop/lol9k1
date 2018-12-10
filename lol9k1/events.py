@@ -1,8 +1,8 @@
 import json
 import random
 import dateutil.parser
-import utilities
-
+import lol9k1.utilities as utilities
+from lol9k1.database import get_db, get_party_start_date, get_party_end_date
 from collections import namedtuple
 from datetime import datetime
 from typing import List
@@ -53,8 +53,8 @@ def handle_event_post(request, session, game_id):
 
 
 def get_party_start_and_end():
-    start = dateutil.parser.parse(utilities.get_party_start_date())
-    end = dateutil.parser.parse(utilities.get_party_end_date())
+    start = dateutil.parser.parse(get_party_start_date())
+    end = dateutil.parser.parse(get_party_end_date())
     return end, start
 
 
@@ -114,7 +114,7 @@ def define_start(fetch_date, row):
 
 
 def get_all_by_date(fetch_date: datetime) -> List[tuple]:
-    tournaments = utilities.get_db().execute('''
+    tournaments = get_db().execute('''
       select t.id, games.name, t.start_datetime, t.end_datetime, users.name, t.mode, t.state 
       from events t 
         join games on t.game = games.id 
@@ -135,7 +135,7 @@ def distinct_creators_as_string(events: List[tuple]) -> str:
 
 
 def get_all_by_game(game_id):
-    tournaments = utilities.get_db().execute('''
+    tournaments = get_db().execute('''
       select t.id, games.name, t.start_datetime, t.end_datetime, users.name, t.mode, t.state 
       from events t 
         join games on t.game = games.id 

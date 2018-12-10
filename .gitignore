@@ -108,8 +108,8 @@ venv.bak/
 .mypy_cache/
 
 .idea/
-app/__pycache__/
-app/lol9k1.db
+lol9k1/__pycache__/
+lol9k1/instance/lol9k1.db
 
 
 ## jsapp and npm

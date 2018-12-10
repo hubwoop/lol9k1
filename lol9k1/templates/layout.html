@@ -33,14 +33,14 @@
       <div class="row mainNavigation">
         <nav>
           <ul>
-            <li><a href="{{ url_for('landing') }}">Home</a></li>
-            <li><a href="{{ url_for('schedule') }}">Schedule</a></li>
-            <li><a href="{{ url_for('landing', _anchor='addGameForm') }}">Add Game</a></li>
-            <li><a href="{{ url_for('invite') }}">Invite</a></li>
+            <li><a href="{{ url_for('landing.landing') }}">Home</a></li>
+            <li><a href="{{ url_for('schedule.schedule') }}">Schedule</a></li>
+            <li><a href="{{ url_for('landing.landing', _anchor='addGameForm') }}">Add Game</a></li>
+            <li><a href="{# {{ url_for('invite') }} #}">Invite</a></li>
             {% if session.get('is_admin', None) %}
-              <li><a href="{{ url_for('administration') }}">Administration</a></li>
+              <li><a href="{{ url_for('admin.administration') }}">Administration</a></li>
             {% endif %}
-            <li><a href="{{ url_for('logout') }}">Log Out</a></li>
+            <li><a href="{{ url_for('auth.logout') }}">Log Out</a></li>
           </ul>
         </nav>
       </div>

@@ -33,8 +33,6 @@ app.config.from_object(__name__)
 app.config.update(dict(
     DATABASE=os.path.join(app.root_path, 'lol9k1.db'),
     SECRET_KEY=os.urandom(24),
-    USERNAME='admin',
-    PASSWORD='swordfish',
     IGDB_API_KEY=os.environ.get('IGDB_API_KEY'),
     MAX_INVITE_TOKENS=3
 ))
@@ -48,114 +46,6 @@ utilities.g = g
 utilities.app = app
 
 
-@app.route('/')
-def landing():
-    if session.get('logged_in'):
-        db = utilities.get_db()
-        if request.args.get('not_voted', default='False') == 'True':
-            cursor = db.execute(select_start_page(without_users_vote=True), [session.get('user_id')])
-        elif request.args.get('order_by_score', default='False') == 'True':
-            cursor = db.execute(select_start_page(order_by_score=True), [session.get('user_id')])
-        else:
-            cursor = db.execute(select_start_page(), [session.get('user_id')])
-        game_rows = cursor.fetchall()
-        return render_template('start.html', game_rows=game_rows, page_title="Start")
-    else:
-        this_dir = os.path.dirname(os.path.realpath(__file__))
-        video_dir = os.path.join(this_dir, 'static', 'vid')
-        random_video = random.choice(os.listdir(video_dir))
-        return render_template('login.html', page_title="Start",
-                               video_uri=url_for('static', filename=f'vid/{random_video}'))
-
-
-@app.route('/add', methods=['POST'])
-def add_game():
-    if not utilities.user_logged_in(session):
-        abort(401)
-    db = utilities.get_db()
-    title = request.form['title']
-    cursor = db.execute('select id from games where slug = ?', [slugify(request.form['title'])])
-    games_row = cursor.fetchone()
-    if games_row:
-        game_id = games_row[0]
-        flash(
-            Markup(f'Game <a href="#gameRow-{game_id}">{title}</a> has already been added!'),
-            STYLE.error
-        )
-    else:
-        game_id = GameAdder(request, session).add_game_to_db()
-        flash(Markup(f'You added game (<a href="#gameRow-{game_id}">{title}</a>).'), STYLE.success)
-    return redirect(url_for('landing'))
-
-
-@app.route('/api/vote/<game>/<vote>', methods=['POST'])
-def game_vote(game, vote):
-    if not utilities.user_logged_in(session):
-        abort(401)
-    vote = int(vote)
-    game = int(game)
-    db = utilities.get_db()
-    if abs(vote) != 1 or not db.execute('select id from games where id = ?', [game]).fetchone():
-        flash(utilities.NAVY_SEAL, STYLE.warning)
-        return redirect(url_for('landing'))
-    user = session.get('user_id')
-    cursor = db.execute('select vote from votes where user = ? and game = ?', [user, game])
-    result = cursor.fetchone()
-    if result:
-        if result[0] == vote:
-            flash("You already voted for that!", STYLE.error)
-            return redirect(url_for('landing'))
-        else:
-            db.execute('update votes set vote = ? where user = ? and game = ?', [vote, user, game])
-            db.commit()
-            flash("Your vote has been changed :)!", STYLE.success)
-            return redirect(url_for('landing', _anchor=f"gameRow-{game}"))
-    else:
-        db.execute('insert into votes (user, game, vote) values (?, ?, ?)', [user, game, vote])
-        db.commit()
-        flash("Thanks for voting :)", STYLE.success)
-        return redirect(url_for('landing', _anchor=f"gameRow-{game}"))
-
-
-@app.route('/delete/game/<int:game_id>')
-def delete_game(game_id: int):
-    if not utilities.current_user_is_admin(session):
-        abort(403)
-    db = utilities.get_db()
-    game = db.execute('select name from games where id = ?', [game_id]).fetchone()[0]
-    try:
-        db.execute('delete from votes where game = ?', [game_id])
-        db.execute('delete from events where game = ?', [game_id])
-        db.execute('delete from games where id = ?', [game_id])
-        db.commit()
-    except sqlite3.Error as e:
-        flash(f'Something went wrong during deletion of game "{game}": {e}', STYLE.error)
-    flash(f"Game {game} deleted.", STYLE.message)
-    return redirect(url_for('landing'))
-
-
-@app.route('/game/<game>')
-def game_detail(game):
-    if not utilities.user_logged_in(session):
-        abort(401)
-    db = utilities.get_db()
-    game_row = db.execute('select * from games where slug = ?', [game]).fetchone()
-    games_events = events.get_all_by_game(game_row[0])
-    return render_template('game.html', game_row=game_row, page_title=game_row[1], events=games_events)
-
-
-@app.route('/schedule', methods=['GET', 'POST'])
-def schedule():
-    prepared_schedule = events.prepare_schedule(request)
-    return render_template('schedule.html',
-                           page_title="Schedule",
-                           creators=prepared_schedule.event_creators,
-                           tournaments=prepared_schedule.formatted_events,
-                           party_start=utilities.get_party_start_date(),
-                           party_end=utilities.get_party_end_date(),
-                           fetched_date=prepared_schedule.fetch_date,
-                           next_day=prepared_schedule.next_day,
-                           previous_day=prepared_schedule.previous_day)
 
 
 @app.route('/tournament/create/<game>', methods=['GET', 'POST'])
@@ -433,156 +323,9 @@ def delete_event(event_id):
 
 #            ADMINISTRATION
 #######################################################################################
-@app.route('/administration', methods=['GET', 'POST'])
-def administration():
-    if not utilities.current_user_is_admin(session):
-        abort(403)
-    db = utilities.get_db()
-    if request.method == 'POST':
-        if dateutil.parser.parse(request.form['date_start']) >= dateutil.parser.parse(request.form['date_end']):
-            flash(Markup(
-                '<a href="https://www.youtube.com/watch?v=HGpr4r9X8DE">Ehh... No</a>. Choose a valid time span.'
-            ), STYLE.error)
-        else:
-            for key, value in request.form.items():
-                db.execute('delete from config where key = ?', [key])
-                db.execute(f'insert into config (key, value) values (?, ?) ', [key, value])
-            db.commit()
-            flash("Settings updated.", STYLE.message)
-
-    config_rows = db.execute('select * from config').fetchall()
-    event_start_date = utilities.get_party_start_date()
-    event_end_date = utilities.get_party_end_date()
-    return render_template('admin.html', page_title="Administration", config_rows=config_rows,
-                           event_start_date=event_start_date, event_end_date=event_end_date)
 
 
-#            INVITE & REGISTER
-#######################################################################################
-@app.route('/invite')
-def invite():
-    if not utilities.user_logged_in(session):
-        abort(401)
-    db = utilities.get_db()
-    cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
-    if utilities.current_user_is_admin(session):
-        tokens_left = "∞"
-    else:
-        tokens_left = app.config.get('MAX_INVITE_TOKENS') - int(cursor.fetchall()[0][0])
-        if tokens_left < 1:
-            tokens_left = None
-    cursor = db.execute('select token, used from invites where added_by = ?', [session.get('user_id')])
-    invites = cursor.fetchall()
-    return render_template('invite.html', page_title="Manage invites", invites=invites, tokens_left=tokens_left)
 
-
-@app.route('/invite/generate')
-def generate_invite():
-    if not utilities.user_logged_in(session):
-        abort(401)
-    db = utilities.get_db()
-    cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
-    tokens = cursor.fetchall()[0][0]
-    if tokens < 3 or utilities.current_user_is_admin(session):
-        token = uuid.uuid4().hex[:12]
-        db.execute('insert into invites (token, used, added_by) values (?, ?, ?)',
-                   [token, 0, int(session.get('user_id'))])
-        db.commit()
-    else:
-        return abort(403)
-    flash(Markup(f'Key <code style="user-select: all;">{token}</code> created.'), STYLE.message)
-    return redirect(url_for('invite'))
-
-
-@app.route('/invite/delete/<token>')
-def delete_invite(token):
-    if not utilities.user_logged_in(session):
-        abort(401)
-    db = utilities.get_db()
-    db.execute('delete from invites where token = ? and added_by = ?', [token, session.get('user_id')])
-    db.commit()
-    flash(Markup(f'Key <code>{token}</code> deleted.'), STYLE.message)
-    return redirect(url_for('invite'))
-
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        db = utilities.get_db()
-        token_and_added_by = register_module.get_invite_token_from_db(request.form['token'])
-        if not token_and_added_by:
-            flash("Your invite key is invalid or has already been used.", STYLE.error)
-            return render_template('register.html', page_title="Anmelden")
-
-        if register_module.username_already_registered(request):
-            flash("Name not available.", STYLE.error)
-            return render_template('register.html', page_title="Anmelden")
-
-        if register_module.email_already_registered(request):
-            flash("Email already assigned to different user.", STYLE.error)
-            return render_template('register.html', page_title="Anmelden")
-
-        try:
-            # checks if the user was invited via the create_admin_command
-            if token_and_added_by[1] == 0:
-                is_admin = 1
-            else:
-                is_admin = 0
-            # add user
-            db.execute('insert into users (name, password, email, gender, is_admin, token_used) '
-                       'values (?, ?, ?, ?, ?, ?)',
-                       [request.form['name'], generate_password_hash(request.form['password']),
-                        request.form['email'], request.form['gender'], is_admin, request.form['token']])
-            db.execute('update invites set used = 1 where token = ?', [request.form['token']])
-            db.commit()
-        except sqlite3.IntegrityError:
-            flash("Name not available.", STYLE.error)
-            return render_template('register.html', page_title="Anmelden")
-
-        flash("Your registration was successful, you may now login.", STYLE.message)
-        return redirect(url_for('landing'))
-    return render_template('register.html', page_title="Login")
-
-
-@app.route('/register/<token>')
-def register_with_token(token):
-    return render_template('register.html', page_title="Login", token=token)
-
-
-#            LOGIN/LOGOUT
-#######################################################################################
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        db = utilities.get_db()
-        try:
-            cursor = db.execute('select id, name, password, is_admin from users where name = (?)',
-                                [request.form['username']])
-        except sqlite3.Error:
-            flash(utilities.NAVY_SEAL, STYLE.warning)
-            return render_template('start.html', page_title="Start")
-        row = cursor.fetchone()
-        if row and check_password_hash(row[2], request.form['password']):
-            session['logged_in'] = True
-            session['user_id'] = int(row[0])
-            session['username'] = request.form['username']
-            if row[3] == 1:
-                session['is_admin'] = True
-            flash("You've logged in successfully. Congratulations!", STYLE.message)
-            return redirect(url_for('landing'))
-        else:
-            flash('Invalid username and/or password.', STYLE.error)
-    return render_template('login.html', page_title="Start")
-
-
-@app.route('/logout')
-def logout():
-    session.pop('logged_in', None)
-    session.pop('user_id', None)
-    session.pop('is_admin', None)
-    session.pop('username', None)
-    flash("You've logged out.", STYLE.message)
-    return redirect(url_for('landing'))
 
 
 #            API
@@ -634,18 +377,7 @@ def add_igdb_ids_if_missing():
 
 #            CUSTOM FILTERS
 #######################################################################################
-@app.template_filter('strftime')
-def _jinja2_filter_datetime(date, fmt=None):
-    date = dateutil.parser.parse(date)
-    native = date.replace(tzinfo=None)
-    the_format = '%d.%m.%y <strong>%H:%M</strong>'
-    return native.strftime(the_format)
 
-
-@app.template_filter('gender')
-def _jinja2_filter_datetime(gender_id, fmt=None):
-    gender = utilities.GENDER_INT_TO_STRING[int(gender_id)]
-    return gender
 
 
 #            GENERIC
@@ -654,21 +386,6 @@ def _jinja2_filter_datetime(gender_id, fmt=None):
 def close_db(error):
     if hasattr(g, 'sqlite_db'):
         g.sqlite_db.close()
-
-
-@app.cli.command('initdb')
-def initdb_command():
-    utilities.init_db()
-    print('Initialized the database.')
-
-
-@app.cli.command('create-admin')
-def create_admin_command():
-    db = utilities.get_db()
-    token = uuid.uuid4().hex[:12]
-    db.execute('insert into invites (token, added_by) values (?, ?)', [token, 0])
-    db.commit()
-    print(f'Your invite token is:\n{token}')
 
 
 if __name__ == "__main__":
