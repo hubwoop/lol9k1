@@ -42,14 +42,14 @@ def create_app(test_config=None):
         return 'Hello, World!'
 
     @app.template_filter('strftime')
-    def _jinja2_filter_datetime(date, fmt=None):
+    def format_date_time_string(date, fmt=None):
         date = dateutil.parser.parse(date)
         native = date.replace(tzinfo=None)
         the_format = '%d.%m.%y <strong>%H:%M</strong>'
         return native.strftime(the_format)
 
     @app.template_filter('gender')
-    def _jinja2_filter_datetime(gender_id, fmt=None):
+    def gender_int_to_string(gender_id, fmt=None):
         gender = utilities.GENDER_INT_TO_STRING[int(gender_id)]
         return gender
 
@@ -58,6 +58,9 @@ def create_app(test_config=None):
 
     from . import auth
     app.register_blueprint(auth.bp)
+
+    from . import invite
+    app.register_blueprint(invite.bp)
 
     from . import landing
     app.register_blueprint(landing.bp)
@@ -71,6 +74,11 @@ def create_app(test_config=None):
     from . import game
     app.register_blueprint(game.bp)
 
+    from . import events
+    app.register_blueprint(events.bp)
+
+    from . import tournament
+    app.register_blueprint(tournament.bp)
 
     return app
 # http://flask.pocoo.org/docs/1.0/tutorial/factory/

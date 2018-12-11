@@ -7,13 +7,13 @@
                 <li class="inviteUsed">{{ invite.token }}</li>
             {% else %}
                 <li>
-                    <form style="float: left; margin-right: 0.5em" action="{{ url_for('delete_invite', token=invite.token) }}" method="get">
+                    <form style="float: left; margin-right: 0.5em" action="{{ url_for('invite.delete_invite', token=invite.token) }}" method="get">
                         <button class="btn btn-danger btn-sm">❌</button>
                     </form>
-                    <a href="{{ url_for('register') }}/{{ invite.token }}">{{ invite.token }}</a>
+                    <a href="{{ url_for('auth.register') }}/{{ invite.token }}">{{ invite.token }}</a>
                   <button onclick="toClipboard('{{ invite.token }}')" class="btn btn-primary btn-sm">Copy!
                   </button>
-                  <input id="{{ invite.token }}" type="text" value="{{ url_for('register') }}/{{ invite.token }}"
+                  <input id="{{ invite.token }}" type="text" value="{{ url_for('auth.register') }}/{{ invite.token }}"
                          title="Token" style="display: none;">
                 </li>
             {% endif %}
@@ -26,7 +26,7 @@
 
     {% if tokens_left %}
         <p>You can create {{ tokens_left }} more tokens.</p>
-    <form action="{{ url_for('generate_invite') }}" method="get">
+    <form action="{{ url_for('invite.generate_invite') }}" method="get">
         <button type="submit" class="btn btn-primary">
             Create token!
         </button>

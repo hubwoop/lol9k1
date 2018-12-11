@@ -1,5 +1,5 @@
 from flask import (
-    Blueprint, render_template, request
+    Blueprint, render_template
 )
 
 import lol9k1.database
@@ -11,7 +11,7 @@ bp = Blueprint('schedule', __name__, url_prefix='/schedule')
 @auth.login_required
 @bp.route('/', methods=['GET', 'POST'])
 def schedule():
-    prepared_schedule = events.prepare_schedule(request)
+    prepared_schedule = events.prepare_schedule()
     return render_template('schedule.html',
                            page_title="Schedule",
                            creators=prepared_schedule.event_creators,

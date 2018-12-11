@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 {% block body %}
   <h2>
-    <a href="{{ url_for('game_detail', game=event.game_slug) }}">{{ event.game }}</a> - Tourney by
+    <a href="{{ url_for('game.game_detail', game=event.game_slug) }}">{{ event.game }}</a> - Tourney by
     {{ event.creator }} (Event #{{ event_id }})
   </h2>
   <div class="row">
@@ -19,7 +19,7 @@
     <div class="row">
       <div class="col-auto">
         <h3>Tourney owner options:</h3>
-        <a href="{{ url_for('stop_pick_phase', event_id=event_id) }}" class="btn btn-primary">End pick phase</a>
+        <a href="{{ url_for('event.stop_pick_phase', event_id=event_id) }}" class="btn btn-primary">End pick phase</a>
         <button class="btn btn-warning btn-sm" onclick="skip_pick()">Force skip</button>
       </div>
     </div>
@@ -28,7 +28,6 @@
 
 
   <script>
-
 
       let current_state;
       let currently_possible_users;
@@ -95,7 +94,7 @@
       }
 
       function update_state() {
-          fetch('{{ url_for('get_state_api', event_id=event_id) }}')
+          fetch('{{ url_for('event.get_state_api', event_id=event_id) }}')
               .then(function (response) {
                   return response.json();
               })
@@ -103,7 +102,7 @@
                   console.log(fetched_state);
                   if (JSON.stringify(fetched_state) !== JSON.stringify(current_state)) {
                       if (fetched_state.state !== "pickphase") {
-                          window.location.assign('{{ url_for('event', event_id=event_id)}}');
+                          window.location.assign('{{ url_for('event.event', event_id=event_id)}}');
                       }
                       if (current_state == null) {
                           initialize_team_state(fetched_state);
@@ -225,7 +224,7 @@
       }
 
       function update_possible_teammates() {
-          fetch('{{ url_for('get_possible_teammates_api', event_id=event_id) }}')
+          fetch('{{ url_for('event.get_possible_teammates_api', event_id=event_id) }}')
               .then(function (response) {
                   return response.json();
               })

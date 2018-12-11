@@ -28,10 +28,10 @@
   {% for event in events %}
     <ul>
       <li>
-        <a href="{{ url_for('event', event_id=event[0]) }}">Event #{{ event[0] }} - {{ event[2]|strftime|safe }} - {{ event[3]|strftime|safe }}</a> - Created by {{ event[4] }}
+        <a href="{{ url_for('event.event', event_id=event[0]) }}">Event #{{ event[0] }} - {{ event[2]|strftime|safe }} - {{ event[3]|strftime|safe }}</a> - Created by {{ event[4] }}
         {% if session.get('is_admin', None) %}
           - <span style="font-size: small">
-          <a href="{{ url_for('delete_event', event_id=event[0]) }}">
+          <a href="{{ url_for('event.delete_event', event_id=event[0]) }}">
           Remove
           </a>
         </span>
@@ -41,6 +41,6 @@
   {% else %}
     <p>No Tournament scheduled for {{ game_row.name }} ({{ game_row.id }})!</p>
   {% endfor %}
-  <a href="{{ url_for('create_tournament', game=game_row.slug) }}" class="btn btn-primary">Create a tournament!</a>
+  <a href="{{ url_for('tournament.create_tournament', game=game_row.slug) }}" class="btn btn-primary">Create a tournament!</a>
 
 {% endblock %}

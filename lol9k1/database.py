@@ -1,9 +1,13 @@
+import json
 import sqlite3
 import uuid
 
 import click
 from flask import current_app, g
 from flask.cli import with_appcontext
+from slugify import slugify
+
+from lol9k1 import utilities
 
 
 def get_db():
@@ -31,24 +35,6 @@ def init_db():
     db.commit()
 
 
-@click.command('init-db')
-@with_appcontext
-def init_db_command():
-    """Clear the existing data and create new tables."""
-    init_db()
-    click.echo('Initialized the database.')
-
-
-@click.command('create-admin')
-@with_appcontext
-def create_admin_command():
-    db = get_db()
-    token = uuid.uuid4().hex[:12]
-    db.execute('insert into invites (token, added_by) values (?, ?)', [token, 0])
-    db.commit()
-    click.echo(f'Your invite token is:\n{token}')
-
-
 def init_app(app):
     app.teardown_appcontext(close_db)
     app.cli.add_command(init_db_command)
@@ -71,3 +57,56 @@ def get_party_end_date() -> str:
         return end_date_row[0]
     except TypeError:
         return ""
+
+
+@click.command('init-db')
+@with_appcontext
+def init_db_command():
+    """Clear the existing data and create new tables."""
+    init_db()
+    click.echo('Initialized the database.')
+
+
+@click.command('create-admin')
+@with_appcontext
+def create_admin_command():
+    db = get_db()
+    token = uuid.uuid4().hex[:12]
+    db.execute('insert into invites (token, added_by) values (?, ?)', [token, 0])
+    db.commit()
+    click.echo(f'Your invite token is:\n{token}')
+
+
+@click.command('add-missing-slugs')
+@with_appcontext
+def add_slugs_if_missing():
+    db = get_db()
+    cursor = db.execute('select id, name, slug from games')
+    game_names = cursor.fetchall()
+    for game_name in game_names:
+        if not game_name[2]:
+            db.execute('update games set slug = ? where id = ?', [slugify(game_name[1]), game_name[0]])
+    db.commit()
+    return "done :)"
+
+
+@click.command('update-igdb-ids')
+@with_appcontext
+def add_igdb_ids_if_missing():
+    igdb_connection = utilities.get_igdb()
+    db = get_db()
+    cursor = db.execute('select id, name, igdb_id from games')
+    game_names = cursor.fetchall()
+    for game_name in game_names:
+        if not game_name[2]:
+            result = igdb_connection.games({
+                'search': game_name[1],
+                'fields': 'name'
+            })
+            print(json.dumps(result.json(), indent=2, sort_keys=True))
+            igdb_id = input(f"ID of game: {game_name[1]}?")
+            if igdb_id:
+                db.execute('update games set igdb_id = ? where id = ?', [int(igdb_id), game_name[0]])
+    db.commit()
+    return "done :)"
+

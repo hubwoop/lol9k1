@@ -1,11 +1,8 @@
 import functools
 import sqlite3
-import uuid
 
 from flask import (
-    Blueprint, flash, g, redirect, render_template, request, session, url_for, current_app,
-    abort)
-from markupsafe import Markup
+    Blueprint, flash, g, redirect, render_template, request, session, url_for, abort)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from lol9k1 import utilities
@@ -20,20 +17,16 @@ def login_required(view):
     def wrapped_view(**kwargs):
         if g.user is None:
             return redirect(url_for('auth.login'))
-
         return view(**kwargs)
-
     return wrapped_view
 
 
 def admin_required(view):
     @functools.wraps(view)
     def wrapped_view(**kwargs):
-        if g.user is None or not session or 'is_admin' not in session or not session['is_admin'] and not session.modified:
+        if current_user_is_not_admin():
             return abort(403)
-
         return view(**kwargs)
-
     return wrapped_view
 
 
@@ -74,6 +67,16 @@ def logout():
     return redirect(url_for('landing'))
 
 
+@bp.before_app_request
+def load_logged_in_user():
+    user_id = session.get('user_id')
+
+    if user_id is None:
+        g.user = None
+    else:
+        g.user = get_db().execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+
+
 def get_invite_token_from_db(provided_token):
     db = get_db()
     cursor = db.execute('select token, added_by from invites where token = ? and used = 0', [provided_token])
@@ -96,49 +99,6 @@ def email_already_registered():
 
 #            INVITE & REGISTER
 #######################################################################################
-
-
-@login_required
-@bp.route('/invite')
-def invite():
-    db = get_db()
-    cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
-    if utilities.current_user_is_admin(session):
-        tokens_left = "∞"
-    else:
-        tokens_left = current_app.config.get('MAX_INVITE_TOKENS') - int(cursor.fetchall()[0][0])
-        if tokens_left < 1:
-            tokens_left = None
-    cursor = db.execute('select token, used from invites where added_by = ?', [session.get('user_id')])
-    invites = cursor.fetchall()
-    return render_template('invite.html', page_title="Manage invites", invites=invites, tokens_left=tokens_left)
-
-
-@login_required
-@bp.route('/invite/generate')
-def generate_invite():
-    db = get_db()
-    cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
-    tokens = cursor.fetchall()[0][0]
-    if tokens < 3 or utilities.current_user_is_admin(session):
-        token = uuid.uuid4().hex[:12]
-        db.execute('insert into invites (token, used, added_by) values (?, ?, ?)',
-                   [token, 0, int(session.get('user_id'))])
-        db.commit()
-    else:
-        return abort(403)
-    flash(Markup(f'Key <code style="user-select: all;">{token}</code> created.'), STYLE.message)
-    return redirect(url_for('invite'))
-
-
-@login_required
-@bp.route('/invite/delete/<token>')
-def delete_invite(token):
-    db = get_db()
-    db.execute('delete from invites where token = ? and added_by = ?', [token, session.get('user_id')])
-    db.commit()
-    flash(Markup(f'Key <code>{token}</code> deleted.'), STYLE.message)
-    return redirect(url_for('invite'))
 
 
 @bp.route('/register', methods=['GET', 'POST'])
@@ -183,5 +143,14 @@ def register():
 @bp.route('/register/<token>')
 def register_with_token(token):
     return render_template('authentication/register.html', page_title="Login", token=token)
+
+
+def current_user_is_not_admin():
+    return g.user is None or not session or 'is_admin' not in session or not session['is_admin'] and not session.modified
+
+
+def current_user_is_admin():
+    return not current_user_is_not_admin()
+
 
 

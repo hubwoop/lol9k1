@@ -4,16 +4,16 @@
   {% if previous_day or next_day %}
     <form method="post">
       <input class="btn btn-primary" style="font-size: 1.2em" {% if not previous_day %} disabled {% endif %}
-             type="submit" formaction="{{ url_for("create_tournament", game=game_row.slug, fetch_date=previous_day) }}"
+             type="submit" formaction="{{ url_for("tournament.create_tournament", game=game_row.slug, fetch_date=previous_day) }}"
              name="<" value="👈">
       <input class="btn btn-primary" style="font-size: 1.2em" type="submit" {% if not next_day %} disabled {% endif %}
-             formaction="{{ url_for("create_tournament", game=game_row.slug, fetch_date=next_day) }}" name=">"
+             formaction="{{ url_for("tournament.create_tournament", game=game_row.slug, fetch_date=next_day) }}" name=">"
              value="👉">
     </form>
   {% endif %}
   <div class="timetable"></div>
 
-  <form action="{{ url_for('create_tournament', game=game_row.slug) }}" method=post>
+  <form action="{{ url_for('tournament.create_tournament', game=game_row.slug) }}" method=post>
     <div class="row">
       <div class="col">
         <label for="start">Start</label>
@@ -66,7 +66,7 @@
           // is Google Chrome
       } else {
           alert("Please use this page with chrome only.");
-          window.location.replace("{{ url_for("game_detail", game=game_row.slug) }}");
+          window.location.replace("{{ url_for("game.game_detail", game=game_row.slug) }}");
       }
   </script>
   {% include 'schedule-js.html' %}

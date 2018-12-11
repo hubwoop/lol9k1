@@ -5,7 +5,7 @@ from flask import (
 from markupsafe import Markup
 
 import lol9k1.database
-from lol9k1 import auth, events
+from lol9k1 import auth
 from lol9k1.database import get_db
 from lol9k1.utilities import STYLE
 

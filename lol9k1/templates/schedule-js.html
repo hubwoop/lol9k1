@@ -28,7 +28,7 @@
     let end = new Date();
     let option = null;
     {% for event in tournaments %}
-        option = {url: '{{ url_for('event', event_id=event['id']) }}'};
+        option = {url: '{{ url_for('event.event', event_id=event['id']) }}'};
         start = new Date({{ event['start']|tojson|safe }});
         end = new Date({{ event['end']|tojson|safe }});
         timetable.addEvent({{ event['game']|tojson|safe }}, {{ event['created_by']|tojson|safe }},

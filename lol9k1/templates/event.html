@@ -2,7 +2,7 @@
 {% block body %}
   {# ---------------------------- EVENT DETAILS --------------------------------------------------------------------- #}
   <h2>
-    <a href="{{ url_for('game_detail', game=event.game_slug) }}">{{ event.game }}</a> - Tourney by
+    <a href="{{ url_for('game.game_detail', game=event.game_slug) }}">{{ event.game }}</a> - Tourney by
     {{ event.creator }} (Event #{{ event_id }})
   </h2>
   <hr>
@@ -58,7 +58,7 @@
     <div class="row">
       <div class="col">
         <h3>Edit event details</h3>
-        <form action="{{ url_for('event', event_id=event_id) }}" method="post">
+        <form action="{{ url_for('event.event', event_id=event_id) }}" method="post">
 
           <div class="form-group">
             <label for="external_url">Tournament bracket URL on external website</label>
@@ -87,7 +87,7 @@
           <div class="alert alert-danger" role="alert">Alert: If you change team captains now, ALL teams must be rebuilt ¯\_(ツ)_/¯
           </div>
         {% endif %}
-        <form action="{{ url_for('event', event_id=event_id) }}" method="post">
+        <form action="{{ url_for('event.event', event_id=event_id) }}" method="post">
           {% for user in users %}
             <div class="form-check">
               <input name="checked-captains" type="checkbox" value="{{ user.id }}" id="possible-captain-{{ user.id }}"
@@ -108,7 +108,7 @@
       {% if teams %}
         <div class="col">
           <h4>Start pick phase</h4>
-          <form action="{{ url_for('event', event_id=event_id) }}" method="post">
+          <form action="{{ url_for('event.event', event_id=event_id) }}" method="post">
             <input type="hidden" name="initiate-picking" value="True">
             <button type="submit" class="btn btn-primary">Start picking teams</button>
           </form>
@@ -122,7 +122,7 @@
         function doubleCheck() {
             let deleteButton = document.getElementById('delete');
             if (clicked > 0) {
-                window.location = '{{ url_for('delete_event', event_id=event_id) }}';
+                window.location = '{{ url_for('event.delete_event', event_id=event_id) }}';
                 return;
             }
             alert('Are you sure you want to delete: "{{ event.game }} - Tourney by {{ event.creator }} (Event #{{ event_id }})"?\nClick delete again to confirm.');
