@@ -21,4 +21,3 @@ def schedule():
                            fetched_date=prepared_schedule.fetch_date,
                            next_day=prepared_schedule.next_day,
                            previous_day=prepared_schedule.previous_day)
-

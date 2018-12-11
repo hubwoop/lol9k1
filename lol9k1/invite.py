@@ -8,7 +8,6 @@ from lol9k1.auth import login_required
 from lol9k1.database import get_db
 from lol9k1.utilities import STYLE
 
-
 bp = Blueprint('invite', __name__, url_prefix='/invite')
 
 

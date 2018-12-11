@@ -1,13 +1,12 @@
 import os
 import random
 import sqlite3
-from slugify import slugify
-
 
 from flask import (
-    Blueprint, flash, g, redirect, render_template, request, session, url_for, Request
+    Blueprint, flash, redirect, render_template, request, session, url_for
 )
 from markupsafe import Markup
+from slugify import slugify
 
 from lol9k1 import auth, utilities
 from lol9k1.database import get_db

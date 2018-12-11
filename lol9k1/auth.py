@@ -18,6 +18,7 @@ def login_required(view):
         if g.user is None:
             return redirect(url_for('auth.login'))
         return view(**kwargs)
+
     return wrapped_view
 
 
@@ -27,11 +28,10 @@ def admin_required(view):
         if current_user_is_not_admin():
             return abort(403)
         return view(**kwargs)
+
     return wrapped_view
 
 
-#            LOGIN/LOGOUT
-#######################################################################################
 @bp.route('/login', methods=('GET', 'POST'))
 def login():
     if request.method == 'POST':
@@ -74,7 +74,7 @@ def load_logged_in_user():
     if user_id is None:
         g.user = None
     else:
-        g.user = get_db().execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+        g.user = get_db().execute('select * from users where id = ?', (user_id,)).fetchone()
 
 
 def get_invite_token_from_db(provided_token):
@@ -96,9 +96,6 @@ def email_already_registered():
         if cursor.fetchone():
             return True
     return False
-
-#            INVITE & REGISTER
-#######################################################################################
 
 
 @bp.route('/register', methods=['GET', 'POST'])
@@ -146,11 +143,9 @@ def register_with_token(token):
 
 
 def current_user_is_not_admin():
-    return g.user is None or not session or 'is_admin' not in session or not session['is_admin'] and not session.modified
+    return g.user is None or not session or 'is_admin' not in session or not session[
+        'is_admin'] and not session.modified
 
 
 def current_user_is_admin():
     return not current_user_is_not_admin()
-
-
-

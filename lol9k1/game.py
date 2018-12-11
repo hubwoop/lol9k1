@@ -1,4 +1,5 @@
 from flask import (Blueprint, render_template)
+
 from lol9k1 import events, auth
 from lol9k1.database import get_db
 

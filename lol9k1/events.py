@@ -1,15 +1,17 @@
 import json
 import random
+from collections import namedtuple
+from datetime import datetime
+from typing import List
+
 import dateutil.parser
 from flask import session, Blueprint, request, redirect, url_for, flash, render_template
 
 import lol9k1.utilities as utilities
 from lol9k1 import auth
 from lol9k1.database import get_db, get_party_start_date, get_party_end_date
-from collections import namedtuple
-from datetime import datetime
-from typing import List
 from lol9k1.utilities import STYLE
+
 Schedule = namedtuple('prepared_schedule',
                       ['fetch_date', 'formatted_events', 'next_day', 'previous_day', 'event_creators'])
 Team = namedtuple('team', ['name', 'captain', 'players', 'team_id'])
@@ -195,8 +197,8 @@ def skip_picking_teammate_api(event_id, team_id):
 
 def user_allowed_to_skip(event_id, currently_picking_team, team_id, event_state) -> bool:
     return ((session.get('user_id') == get_captain(currently_picking_team)
-            or auth.current_user_is_admin()
-            or session.get('user_id') == get_creator_of(event_id))
+             or auth.current_user_is_admin()
+             or session.get('user_id') == get_creator_of(event_id))
             and event_state == "pickphase"
             and team_id == currently_picking_team)
 

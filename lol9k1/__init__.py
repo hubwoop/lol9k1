@@ -8,7 +8,6 @@ from lol9k1 import utilities
 
 
 def create_app(test_config=None):
-    # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_mapping(
         DATABASE=os.path.join(app.root_path, 'lol9k1.db'),
@@ -36,21 +35,16 @@ def create_app(test_config=None):
     except OSError:
         pass
 
-    # a simple page that says hello
-    @app.route('/hello')
-    def hello():
-        return 'Hello, World!'
-
     @app.template_filter('strftime')
-    def format_date_time_string(date, fmt=None):
+    def format_date_time_string(date: str, fmt=None) -> str:
         date = dateutil.parser.parse(date)
         native = date.replace(tzinfo=None)
         the_format = '%d.%m.%y <strong>%H:%M</strong>'
         return native.strftime(the_format)
 
     @app.template_filter('gender')
-    def gender_int_to_string(gender_id, fmt=None):
-        gender = utilities.GENDER_INT_TO_STRING[int(gender_id)]
+    def translate_gender(gender: int, fmt=None) -> str:
+        gender = utilities.GENDER_INT_TO_STRING[int(gender)]
         return gender
 
     from . import database
@@ -81,4 +75,3 @@ def create_app(test_config=None):
     app.register_blueprint(tournament.bp)
 
     return app
-# http://flask.pocoo.org/docs/1.0/tutorial/factory/

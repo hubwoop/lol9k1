@@ -1,7 +1,5 @@
 import dateutil
-from flask import (
-    Blueprint, render_template, request,
-    flash)
+from flask import (Blueprint, render_template, request, flash)
 from markupsafe import Markup
 
 import lol9k1.database

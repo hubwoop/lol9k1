@@ -1,12 +1,11 @@
 import json
 import sqlite3
 import uuid
-
 import click
 from flask import current_app, g
 from flask.cli import with_appcontext
 from slugify import slugify
-
+from igdb_api_python.igdb import igdb
 from lol9k1 import utilities
 
 
@@ -110,3 +109,20 @@ def add_igdb_ids_if_missing():
     db.commit()
     return "done :)"
 
+
+def get_igdb() -> igdb:
+    if not hasattr(g, 'igdb'):
+        g.igdb = igdb(current_app.config['IGDB_API_KEY'])
+    return g.igdb
+
+
+def get_game_slug_by_id(game_id: int) -> str:
+    db = get_db()
+    slug_row = db.execute('select slug from games where id = ?', [game_id]).fetchone()
+    return slug_row[0]
+
+
+def get_game_id_by_slug(slug: str) -> int:
+    db = get_db()
+    slug_row = db.execute('select id from games where slug = ?', [slug]).fetchone()
+    return int(slug_row[0])
