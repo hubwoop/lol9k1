@@ -64,7 +64,7 @@ def logout():
     session.pop('is_admin', None)
     session.pop('username', None)
     flash("You've logged out.", STYLE.message)
-    return redirect(url_for('landing'))
+    return redirect(url_for('landing.landing'))
 
 
 @bp.before_app_request
