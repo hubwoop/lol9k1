@@ -50,7 +50,7 @@ def admin_required(view):
 
 
 @bp.route('/login', methods=('GET', 'POST'))
-def login():
+def login() -> None:
     if request.method == 'POST':
         user = get_user_by_name(request.form['username'])
         if not user:
@@ -80,7 +80,7 @@ def get_user_by_name(name) -> Optional[User]:
 
 @login_required
 @bp.route('/logout')
-def logout():
+def logout() -> None:
     session.pop('logged_in', None)
     session.pop('user_id', None)
     session.pop('is_admin', None)
@@ -90,7 +90,7 @@ def logout():
 
 
 @bp.before_app_request
-def load_logged_in_user():
+def load_logged_in_user() -> None:
     user_id = session.get('user_id')
     if user_id is None:
         g.user = None
@@ -98,58 +98,65 @@ def load_logged_in_user():
         g.user = database.get_db().execute('select * from users where id = ?', (user_id,)).fetchone()
 
 
-def username_already_registered():
+def username_already_registered(name) -> bool:
     db = database.get_db()
-    cursor = db.execute('select id from users where name = ?', [request.form['name']])
-    return cursor.fetchone()
+    cursor = db.execute('select id from users where name = ?', [name])
+    return cursor.fetchone() is True
 
 
-def email_already_registered():
+def email_already_registered(email) -> bool:
     db = database.get_db()
-    if request.form['email']:
-        cursor = db.execute('select email from users where email = ?', [request.form['email']])
-        if cursor.fetchone():
-            return True
-    return False
+    cursor = db.execute('select email from users where email = ?', [email])
+    return cursor.fetchone() is True
+
+
+def add_user() -> None:
+    token = database.get_invite_token(request.form['token'])
+    if not token:
+        raise RegistrationError("Your invite key is invalid or has already been used.")
+
+    if username_already_registered(request.form['name']):
+        raise RegistrationError("Name not available.")
+
+    email = request.form['email']
+    if email and email_already_registered(email):
+        raise RegistrationError("Email already assigned to different user.")
+
+    is_admin = is_admin_token(token)
+    db = database.get_db()
+    try:
+        # add user
+        db.execute('insert into users (name, password, email, gender, is_admin, token_used) '
+                   'values (?, ?, ?, ?, ?, ?)',
+                   [request.form['name'], generate_password_hash(request.form['password']),
+                    request.form['email'], request.form['gender'], is_admin, request.form['token']])
+    except sqlite3.IntegrityError:
+        raise RegistrationError("Name not available.")
+
+    db.execute('update invites set used = 1 where token = ?', [request.form['token']])
+    db.commit()
+
+
+class RegistrationError(Exception):
+    pass
 
 
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
-    if request.method == 'POST':
-        db = database.get_db()
-        token = database.get_invite_token(request.form['token'])
-        if not token:
-            flash("Your invite key is invalid or has already been used.", STYLE.error)
-            return render_template('authentication/register.html', page_title="Anmelden")
+    if request.method == 'GET':
+        return render_template('authentication/register.html', page_title="Login")
+    try:
+        add_user()
+    except RegistrationError as registration_error:
+        flash(str(registration_error), STYLE.error)
+        return render_template('authentication/register.html', page_title="Anmelden")
 
-        if username_already_registered():
-            flash("Name not available.", STYLE.error)
-            return render_template('authentication/register.html', page_title="Anmelden")
-
-        if email_already_registered():
-            flash("Email already assigned to different user.", STYLE.error)
-            return render_template('authentication/register.html', page_title="Anmelden")
-
-        try:
-            # checks if the user was invited via the create_admin_command
-            is_admin = is_admin_token(token)
-            # add user
-            db.execute('insert into users (name, password, email, gender, is_admin, token_used) '
-                       'values (?, ?, ?, ?, ?, ?)',
-                       [request.form['name'], generate_password_hash(request.form['password']),
-                        request.form['email'], request.form['gender'], is_admin, request.form['token']])
-            db.execute('update invites set used = 1 where token = ?', [request.form['token']])
-            db.commit()
-        except sqlite3.IntegrityError:
-            flash("Name not available.", STYLE.error)
-            return render_template('authentication/register.html', page_title="Anmelden")
-
-        flash("Your registration was successful, you may now login.", STYLE.message)
-        return redirect(url_for('landing.landing'))
-    return render_template('authentication/register.html', page_title="Login")
+    flash("Your registration was successful, you may now login.", STYLE.message)
+    return redirect(url_for('landing.landing'))
 
 
 def is_admin_token(token):
+    # checks if the user was invited via the create_admin_command
     is_admin = 1 if token.added_by == 0 else is_admin = 0
     return is_admin
 
