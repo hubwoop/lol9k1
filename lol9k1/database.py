@@ -132,4 +132,4 @@ def get_game_id_by_slug(slug: str) -> int:
 def get_invite_token(provided_token) -> TokenInfo:
     db = get_db()
     cursor = db.execute('select token, added_by from invites where token = ? and used = 0', [provided_token])
-    return TokenInfo(**cursor.fetchone())
+    return TokenInfo(*cursor.fetchone())
