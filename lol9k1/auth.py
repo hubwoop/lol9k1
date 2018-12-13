@@ -91,7 +91,7 @@ def username_already_registered():
 
 
 def email_already_registered():
-    db = get_db()
+    db = database.get_db()
     if request.form['email']:
         cursor = db.execute('select email from users where email = ?', [request.form['email']])
         if cursor.fetchone():
