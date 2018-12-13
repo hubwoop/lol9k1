@@ -1,13 +1,20 @@
 import functools
 import sqlite3
+from typing import NamedTuple
 
 from flask import (
     Blueprint, flash, g, redirect, render_template, request, session, url_for, abort)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from lol9k1 import utilities
-from lol9k1.database import get_db
+import lol9k1.database as database
 from lol9k1.utilities import STYLE
+
+
+class TokenInfo(NamedTuple):
+    token: str
+    added_by: int
+
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 
@@ -35,7 +42,7 @@ def admin_required(view):
 @bp.route('/login', methods=('GET', 'POST'))
 def login():
     if request.method == 'POST':
-        db = get_db()
+        db = database.get_db()
         try:
             cursor = db.execute('select id, name, password, is_admin from users where name = (?)',
                                 [request.form['username']])
@@ -74,17 +81,11 @@ def load_logged_in_user():
     if user_id is None:
         g.user = None
     else:
-        g.user = get_db().execute('select * from users where id = ?', (user_id,)).fetchone()
-
-
-def get_invite_token_from_db(provided_token):
-    db = get_db()
-    cursor = db.execute('select token, added_by from invites where token = ? and used = 0', [provided_token])
-    return cursor.fetchone()
+        g.user = database.get_db().execute('select * from users where id = ?', (user_id,)).fetchone()
 
 
 def username_already_registered():
-    db = get_db()
+    db = database.get_db()
     cursor = db.execute('select id from users where name = ?', [request.form['name']])
     return cursor.fetchone()
 
@@ -101,9 +102,9 @@ def email_already_registered():
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        db = get_db()
-        token_and_added_by = get_invite_token_from_db(request.form['token'])
-        if not token_and_added_by:
+        db = database.get_db()
+        token = database.get_invite_token(request.form['token'])
+        if not token:
             flash("Your invite key is invalid or has already been used.", STYLE.error)
             return render_template('authentication/register.html', page_title="Anmelden")
 
@@ -117,10 +118,7 @@ def register():
 
         try:
             # checks if the user was invited via the create_admin_command
-            if token_and_added_by[1] == 0:
-                is_admin = 1
-            else:
-                is_admin = 0
+            is_admin = is_admin_token(token)
             # add user
             db.execute('insert into users (name, password, email, gender, is_admin, token_used) '
                        'values (?, ?, ?, ?, ?, ?)',
@@ -135,6 +133,11 @@ def register():
         flash("Your registration was successful, you may now login.", STYLE.message)
         return redirect(url_for('landing.landing'))
     return render_template('authentication/register.html', page_title="Login")
+
+
+def is_admin_token(token):
+    is_admin = 1 if token.added_by == 0 else is_admin = 0
+    return is_admin
 
 
 @bp.route('/register/<token>')

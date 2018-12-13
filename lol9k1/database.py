@@ -7,6 +7,7 @@ from flask.cli import with_appcontext
 from slugify import slugify
 from igdb_api_python.igdb import igdb
 from lol9k1 import utilities
+from lol9k1.auth import TokenInfo
 
 
 def get_db():
@@ -126,3 +127,9 @@ def get_game_id_by_slug(slug: str) -> int:
     db = get_db()
     slug_row = db.execute('select id from games where slug = ?', [slug]).fetchone()
     return int(slug_row[0])
+
+
+def get_invite_token(provided_token) -> TokenInfo:
+    db = get_db()
+    cursor = db.execute('select token, added_by from invites where token = ? and used = 0', [provided_token])
+    return TokenInfo(**cursor.fetchone())
