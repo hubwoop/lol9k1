@@ -71,11 +71,12 @@ def login() -> None:
 def get_user_by_name(name) -> Optional[User]:
     db = database.get_db()
     try:
-        cursor = db.execute('select id, name, password, is_admin from users where name = (?)', [name])
+        cursor = db.execute('select * from users where name = (?)', [name])
     except sqlite3.Error:
         flash(utilities.NAVY_SEAL, STYLE.warning)
         return None
-    return User(*cursor.fetchone())
+    result = cursor.fetchone()
+    return User(*result)
 
 
 @login_required

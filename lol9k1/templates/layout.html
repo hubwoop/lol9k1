@@ -10,7 +10,7 @@
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon-256.png') }}">
 
   {% if request.path.startswith("/schedule") or request.path.startswith("/tournament/create") %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/timetablejs.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/timetable.css') }}">
     <script src="{{ url_for('static', filename='js/timetable/timetable.js') }}"></script>
   {% endif %}
 </head>
