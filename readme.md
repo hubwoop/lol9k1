@@ -1,4 +1,5 @@
 # LOL9k1 (Lan party organizer LOL > 9000)
+[![BCH compliance](https://bettercodehub.com/edge/badge/hubwoop/lol9k1?branch=master)](https://bettercodehub.com/)
 
 Organize your lan party!
 
