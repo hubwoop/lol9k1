@@ -12,5 +12,5 @@ GENDER_INT_TO_STRING = {
     3: "🚁"
 }
 
-flash_categories = namedtuple('flash_type', ['message', 'error', 'warning', 'success'])
-STYLE = flash_categories('primary', 'danger', 'warning', 'success')
+FlashCategories = namedtuple('flash_type', ['message', 'error', 'warning', 'success'])
+STYLE = FlashCategories('primary', 'danger', 'warning', 'success')

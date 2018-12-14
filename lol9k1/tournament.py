@@ -9,7 +9,7 @@ bp = Blueprint('tournament', __name__, url_prefix='/tournament')
 
 
 @auth.login_required
-@bp.route('/tournament/create/<game>', methods=['GET', 'POST'])
+@bp.route('/create/<game>', methods=['GET', 'POST'])
 def create_tournament(game: str):
     db = get_db()
     games_row = db.execute('select * from games where slug = ?', [game]).fetchone()

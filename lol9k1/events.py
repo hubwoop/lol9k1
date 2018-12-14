@@ -32,7 +32,7 @@ def event(event_id):
     if not event_details:
         # user tries to call nonexistent event
         flash("The selected event does not exist (anymore).", STYLE.error)
-        return redirect(url_for('landing'))
+        return redirect(url_for('landing.landing'))
     page_title = f"{event_details.game} Event #{event_id} -  by {event_details.creator}"
     if event_details.state:
         return render_template('pick.html',
@@ -51,7 +51,7 @@ def event(event_id):
         if not teams:
             flash('Picking teams does only make sense when teams exist :> '
                   'You need to assign team captains for that.', STYLE.message)
-            return redirect(url_for('event', event_id=event_id))
+            return redirect(url_for('.event', event_id=event_id))
         initialize_pick_phase(event_id)
         return render_template('pick.html',
                                page_title=page_title,
@@ -111,7 +111,7 @@ def handle_captains_post(event_id):
 def stop_pick_phase(event_id):
     if get_state(event_id) == 'pickphase' and session.get('user_id') == get_creator_of(event_id):
         end_pick_state_in_db(event_id)
-    return redirect(url_for('event', event_id=event_id))
+    return redirect(url_for('.event', event_id=event_id))
 
 
 @auth.login_required
@@ -267,10 +267,10 @@ def delete_event(event_id):
     if auth.current_user_is_admin() or get_creator_of(event_id) == session.get('user_id'):
         game = delete_with_all_dependencies_in_database(event_id)
         flash(f"Deleted event {event_id}.", STYLE.message)
-        return redirect(url_for('game_detail', game=game))
+        return redirect(url_for('game.game_detail', game=game))
     else:
         flash(utilities.NAVY_SEAL, STYLE.warning)
-        return redirect(url_for('landing'))
+        return redirect(url_for('landing.landing'))
 
 
 def prepare_schedule(fetch_date=None) -> Schedule:
@@ -284,9 +284,9 @@ def prepare_schedule(fetch_date=None) -> Schedule:
     return Schedule(fetch_date, formatted_events, next_day, previous_day, event_creators)
 
 
-def handle_event_post(game_id):
+def handle_event_post(game_id) -> (str, STYLE):
     if request.args.get('fetch_date', None):
-        return
+        return utilities.NAVY_SEAL, STYLE.warning
     try:
         start = dateutil.parser.parse(request.form['start'])
         end = dateutil.parser.parse(request.form['end'])
