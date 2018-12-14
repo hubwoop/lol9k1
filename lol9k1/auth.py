@@ -157,7 +157,7 @@ def register():
 
 def is_admin_token(token):
     # checks if the user was invited via the create_admin_command
-    is_admin = 1 if token.added_by == 0 else is_admin = 0
+    is_admin = 1 if token.added_by == 0 else 0
     return is_admin
 
 
