@@ -11,6 +11,9 @@ from lol9k1 import utilities
 from lol9k1.utilities import STYLE
 
 
+bp = Blueprint('auth', __name__, url_prefix='/auth')
+
+
 class TokenInfo(NamedTuple):
     token: str
     added_by: int
@@ -26,7 +29,8 @@ class User(NamedTuple):
     token_used: str
 
 
-bp = Blueprint('auth', __name__, url_prefix='/auth')
+class RegistrationError(Exception):
+    pass
 
 
 def login_required(view):
@@ -42,7 +46,7 @@ def login_required(view):
 def admin_required(view):
     @functools.wraps(view)
     def wrapped_view(**kwargs):
-        if current_user_is_not_admin():
+        if not current_user_is_admin():
             return abort(403)
         return view(**kwargs)
 
@@ -113,15 +117,7 @@ def email_already_registered(email) -> bool:
 
 def add_user() -> None:
     token = database.get_invite_token(request.form['token'])
-    if not token:
-        raise RegistrationError("Your invite key is invalid or has already been used.")
-
-    if username_already_registered(request.form['name']):
-        raise RegistrationError("Name not available.")
-
-    email = request.form['email']
-    if email and email_already_registered(email):
-        raise RegistrationError("Email already assigned to different user.")
+    validate_register_form_data(token)
 
     is_admin = is_admin_token(token)
     db = database.get_db()
@@ -138,8 +134,14 @@ def add_user() -> None:
     db.commit()
 
 
-class RegistrationError(Exception):
-    pass
+def validate_register_form_data(token):
+    if not token:
+        raise RegistrationError("Your invite key is invalid or has already been used.")
+    if username_already_registered(request.form['name']):
+        raise RegistrationError("Name not available.")
+    email = request.form['email']
+    if email and email_already_registered(email):
+        raise RegistrationError("Email already assigned to different user.")
 
 
 @bp.route('/register', methods=['GET', 'POST'])
@@ -167,13 +169,5 @@ def register_with_token(token):
     return render_template('authentication/register.html', page_title="Login", token=token)
 
 
-def current_user_is_not_admin():
-    return g.user is None \
-           or not session \
-           or 'is_admin' not in session \
-           or not session['is_admin'] \
-           and not session.modified
-
-
 def current_user_is_admin():
-    return not current_user_is_not_admin()
+    return g.user and session and not session.modified and 'is_admin' in session and session['is_admin']
