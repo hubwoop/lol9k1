@@ -3,7 +3,8 @@ from flask import (
 )
 
 import lol9k1.database
-from lol9k1 import auth, events
+from lol9k1 import events
+from lol9k1.auth import auth
 
 bp = Blueprint('schedule', __name__, url_prefix='/schedule')
 

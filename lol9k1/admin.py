@@ -2,7 +2,7 @@ import dateutil
 from flask import (Blueprint, render_template, request, flash)
 from markupsafe import Markup
 
-from lol9k1 import auth
+from lol9k1.auth import auth
 import lol9k1.database as database
 from lol9k1.utilities import STYLE
 

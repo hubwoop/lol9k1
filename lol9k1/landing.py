@@ -8,7 +8,8 @@ from flask import (
 from markupsafe import Markup
 from slugify import slugify
 
-from lol9k1 import auth, utilities
+from lol9k1 import utilities
+from lol9k1.auth import auth
 from lol9k1.database import get_db
 from lol9k1.utilities import STYLE
 

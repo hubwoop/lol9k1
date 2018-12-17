@@ -3,6 +3,7 @@ import os
 import dateutil
 from flask import Flask
 from flaskext.markdown import Markdown
+from slugify import slugify
 
 from lol9k1 import utilities
 
@@ -47,10 +48,14 @@ def create_app(test_config=None):
         gender = utilities.GENDER_INT_TO_STRING[int(gender)]
         return gender
 
+    @app.template_filter('slugify')
+    def translate_gender(string: str, fmt=None) -> str:
+        return slugify(string)
+
     from . import database
     database.init_app(app)
 
-    from . import auth
+    from lol9k1.auth import auth
     app.register_blueprint(auth.bp)
 
     from . import invite

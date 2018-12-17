@@ -1,81 +1,38 @@
 {% extends "layout.html" %}
+{% macro input(field)  -%}
+  <div class="form-group">
+    {{ field.label }}
+    {% if field.description or field.flags.required %}
+      {{ field(class="form-control", **{'aria-describedby': field.label.text|slugify~"Help"}) }}
+      <small id="{{field.label.text|slugify~'Help'}}" class="form-text text-muted">
+        {{ field.description }} {% if field.flags.required %}(required){% endif %}
+      </small>
+    {% else %}
+      {{ field(class="form-control") }}
+    {% endif %}
+  </div>
+{%- endmacro  %}
+
 {% block body %}
     {% if session.logged_in %}
         You're already registered ;)
     {% else %}
-        <!-- https://bootsnipp.com/forms -->
-        <form class="form-horizontal" action="{{ url_for('auth.register') }}" method="post">
-            <fieldset>
-
-                <!-- Form Name -->
-                <legend>Register</legend>
-
-                <!-- Text input-->
-                <div class="form-group">
-                    <label class="col-md-4 control-label" for="token">Your invite token*</label>
-                    <div class="col-md-4">
-                        <input id="token" name="token" type="text"
-                               {% if token %}value="{{ token }}"{% endif %}
-                               placeholder="Someone sent you this."
-                               class="form-control input-md" required>
-                      <small class="form-text text-muted">(Required)</small>
-                    </div>
-                </div>
-
-                <!-- Text input-->
-                <div class="form-group">
-                    <label class="col-md-4 control-label" for="name">Your name*</label>
-                    <div class="col-md-4">
-                        <input id="name" name="name" type="text" placeholder="yourFancyName"
-                               class="form-control input-md" required>
-                      <small class="form-text text-muted">Please choose a name that everyone knows! (Required)</small>
-                    </div>
-                </div>
-
-                <!-- Password input-->
-                <div class="form-group">
-                    <label class="col-md-4 control-label" for="password">Password*</label>
-                    <div class="col-md-4">
-                        <input id="password" name="password" type="password" placeholder="wow such secret"
-                               class="form-control input-md" required>
-                      <small class="form-text text-muted">Example of secure password: b̶̢̯̞̫͔͉̱̳̹̝̳̻͓̙̗̣͞ͅ(̴̙̗̙͉̞͚̯̩͞"͟͠҉̻̼̝̗̺̜̟͈̞͖͓̫̺̭̥j̢̛̟̩͚̯͡s̷̶͏̼͇̮̺̼̰͉̘͔̩͎̹͘B̷̵̰̝̟̖͉̕͢͟ͅŞ҉̖̯͇̬̳̮̟͕̲͙̘͡ͅo̵̴̧͔̯̖̙̗͉͚̕l͇̣͍̻̗̦͎͇͓̗̲̟̙͍͇̣̩͢͝j̴͡҉̦̱̤̬̱̣͍͙̯͕̖̯̳̕͢k̵̹̻̘̘̦̭͓̭̱̜̩͇̜͜͠d̴͖̜̙͇͙͓͉̞͈͓̳̤͔̗͟ (Required)<br><br><br></small>
-                    </div>
-                </div>
-
-                <!-- Text input-->
-                <div class="form-group">
-                    <label class="col-md-4 control-label" for="email">E-Mail</label>
-                    <div class="col-md-4">
-                        <input id="email" name="email" type="email" placeholder="1337-hax0r@cyber.gov"
-                               class="form-control input-md">
-                      <small class="form-text text-muted">If you should ever forget your password.</small>
-                    </div>
-                </div>
-
-                <!-- Select Basic -->
-                <div class="form-group">
-                    <label class="col-md-4 control-label" for="gender">Gender</label>
-                    <div class="col-md-4">
-                        <select id="gender" name="gender" class="form-control">
-                            <option value="0">(Optional)</option>
-                            <option value="1">Male</option>
-                            <option value="2">Female</option>
-                            <option value="3">Boeing AH-64</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Button -->
-                <div class="form-group">
-                    <label class="col-md-4 control-label" for="registerButton">Register</label>
-                    <div class="col-md-4">
-                        <button id="registerButton" name="registerButton" class="btn btn-primary" type=submit>Hit me!
-                        </button>
-                    </div>
-                </div>
-
-            </fieldset>
-        </form>
+    <div style="max-width: 500px">
+    <form method="POST" action="{{ url_for('auth.register') }}">
+        {{ form.csrf_token }}
+        <div class="form-group">
+          {{ form.token.label }}
+          {% if token %}{{ form.token(value=token, disabled=True, class="form-control") }}{% else %}{{ form.token(class="form-control") }}{% endif %}
+          <small id="{{form.token.label.text|slugify~'Help'}}" class="form-text text-muted">{{ form.token.description }} (required)</small>
+        </div>
+        {{ input(form.name) }}
+        {{ input(form.password) }}
+        {{ input(form.confirm) }}
+        {{ input(form.email) }}
+        {{ input(form.gender) }}
+        <button id="registerButton" class="btn btn-primary" type=submit>Hit me!</button>
+      </form>
+    </div>
 
     {% endif %}
 {% endblock %}

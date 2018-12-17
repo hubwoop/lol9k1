@@ -1,6 +1,7 @@
 from flask import (Blueprint, render_template)
 
-from lol9k1 import events, auth
+from lol9k1 import events
+from lol9k1.auth import auth
 from lol9k1.database import get_db
 
 bp = Blueprint('game', __name__, url_prefix='/game')

@@ -1,7 +1,8 @@
 import dateutil
 from flask import Blueprint, abort, request, flash, render_template
 
-from lol9k1 import auth, events
+from lol9k1 import events
+from lol9k1.auth import auth
 from lol9k1.database import get_db, get_party_start_date, get_party_end_date
 from lol9k1.utilities import STYLE
 

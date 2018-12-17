@@ -3,20 +3,19 @@ import uuid
 from flask import session, current_app, render_template, abort, flash, redirect, url_for, Blueprint
 from markupsafe import Markup
 
-from lol9k1 import auth
-from lol9k1.auth import login_required
+import lol9k1.auth.auth as authentication
 from lol9k1.database import get_db
 from lol9k1.utilities import STYLE
 
 bp = Blueprint('invite', __name__, url_prefix='/invite')
 
 
-@login_required
+@authentication.login_required
 @bp.route('/invite')
 def invite():
     db = get_db()
     cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
-    if auth.current_user_is_admin():
+    if authentication.current_user_is_admin():
         tokens_left = "∞"
     else:
         tokens_left = current_app.config.get('MAX_INVITE_TOKENS') - int(cursor.fetchall()[0][0])
@@ -27,13 +26,13 @@ def invite():
     return render_template('invite.html', page_title="Manage invites", invites=invites, tokens_left=tokens_left)
 
 
-@login_required
+@authentication.login_required
 @bp.route('/invite/generate')
 def generate_invite():
     db = get_db()
     cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
     tokens = cursor.fetchall()[0][0]
-    if tokens < 3 or auth.current_user_is_admin():
+    if tokens < 3 or authentication.current_user_is_admin():
         token = uuid.uuid4().hex[:12]
         db.execute('insert into invites (token, used, added_by) values (?, ?, ?)',
                    [token, 0, int(session.get('user_id'))])
@@ -44,7 +43,7 @@ def generate_invite():
     return redirect(url_for('invite.invite'))
 
 
-@login_required
+@authentication.login_required
 @bp.route('/invite/delete/<token>')
 def delete_invite(token):
     db = get_db()

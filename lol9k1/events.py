@@ -8,7 +8,7 @@ import dateutil.parser
 from flask import session, Blueprint, request, redirect, url_for, flash, render_template
 
 import lol9k1.utilities as utilities
-from lol9k1 import auth
+from lol9k1.auth import auth
 from lol9k1.database import get_db, get_party_start_date, get_party_end_date
 from lol9k1.utilities import STYLE
 
@@ -210,9 +210,8 @@ def set_team_name_api(team_id):
         captain = get_captain(team_id)
     except KeyError:
         return json.dumps(utilities.NAVY_SEAL)
-    if not auth.current_user_is_admin():
-        if int(session.get('user_id')) != int(captain):
-            return json.dumps(utilities.NAVY_SEAL)
+    if not auth.current_user_is_admin() and int(session.get('user_id')) != int(captain):
+        return json.dumps(utilities.NAVY_SEAL)
     new_name = request.json
     if not type(new_name) == str:
         return json.dumps(utilities.NAVY_SEAL)
