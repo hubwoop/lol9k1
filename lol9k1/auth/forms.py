@@ -53,8 +53,9 @@ class UniqueUserEntry(object):
         self.message = message if message else f"{column} already reserved."
 
     def __call__(self, form, field):
-        cursor = database.get_db().execute('select id from users where ? = ?', [self.column, field.data])
-        if not cursor.fetchone():
+        possible_match = database.get_db().execute('select id from users where ? = ?', [self.column, field.data])
+
+        if possible_match.fetchone():
             raise ValidationError(self.message)
 
 
@@ -64,14 +65,17 @@ class RegistrationForm(FlaskForm):
 
     name = StringField(
         label='Username',
-        validators=[InputRequired(), UniqueUserEntry("name", "Username already registered.")],
+        validators=[InputRequired(), UniqueUserEntry("name", "Username already registered."),
+                    Length(min=3, message="Usernames must be at least 3 characters long"),
+                    Length(max=30, message="Usernames have a maximum length of 30 characters.")],
         description='Please choose a name that everyone knows!',
         render_kw={"placeholder": "Your Fancy Name"})
 
     password = PasswordField(
         label='New Password',
         validators=[InputRequired(),
-                    Length(min=8, message='Password must be at least 8 characters long'),
+                    Length(min=8, message='Password must be at least 8 characters long.'),
+                    Length(max=300, message='Password may not be longer than 300 characters.'),
                     EqualTo('confirm', message='Passwords must match')],
         description='Example of secure password:'
                     ' b̶̢̯̞̫͔͉̱̳̹̝̳̻͓̙̗̣͞ͅ(̴̙̗̙͉̞͚̯̩͞"͟͠҉̻̼̝̗̺̜̟͈̞͖͓̫̺̭̥j'
@@ -90,6 +94,5 @@ class RegistrationForm(FlaskForm):
 
     gender = SelectField(label='Gender', choices=[
         ('optional', "Doesn't matter"), ('male', 'Male'), ('female', 'Female'), ('apache', 'Boeing AH-64')])
-
 
 

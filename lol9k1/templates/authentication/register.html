@@ -1,29 +1,50 @@
 {% extends "layout.html" %}
+{% block title %}Register{% endblock %}
+{% macro renderErrors(errors) -%}
+<div class="invalid-feedback">
+  {% for error in errors %}{{ error }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+</div>
+{%- endmacro  %}
+
 {% macro input(field)  -%}
   <div class="form-group">
     {{ field.label }}
     {% if field.description or field.flags.required %}
-      {{ field(class="form-control", **{'aria-describedby': field.label.text|slugify~"Help"}) }}
+      {% if field.errors %}
+        {{ field(**{'aria-describedby': field.label.text|slugify~"Help", 'class': 'form-control is-invalid'}) }}
+      {% else %}
+       {{ field(class="form-control", **{'aria-describedby': field.label.text|slugify~"Help"}) }}
+      {% endif %}
       <small id="{{field.label.text|slugify~'Help'}}" class="form-text text-muted">
         {{ field.description }} {% if field.flags.required %}(required){% endif %}
       </small>
     {% else %}
       {{ field(class="form-control") }}
     {% endif %}
+    {% if field.errors %}{{ renderErrors(field.errors) }}{% endif %}
   </div>
 {%- endmacro  %}
 
 {% block body %}
     {% if session.logged_in %}
-        You're already registered ;)
+        You're already registered 🧙‍♂️
     {% else %}
     <div style="max-width: 500px">
     <form method="POST" action="{{ url_for('auth.register') }}">
         {{ form.csrf_token }}
         <div class="form-group">
           {{ form.token.label }}
-          {% if token %}{{ form.token(value=token, disabled=True, class="form-control") }}{% else %}{{ form.token(class="form-control") }}{% endif %}
-          <small id="{{form.token.label.text|slugify~'Help'}}" class="form-text text-muted">{{ form.token.description }} (required)</small>
+          {% if token %}
+            {{ form.token(value=token, disabled=True, class="form-control") }}
+          {% elif form.token.errors %}
+            {{ form.token(**{'aria-describedby': form.token.label.text|slugify~"Help", 'class': 'form-control is-invalid'}) }}
+          {% else %}
+            {{ form.token(class="form-control") }}
+          {% endif %}
+          <small id="{{form.token.label.text|slugify~'Help'}}" class="form-text text-muted">
+            {{ form.token.description }} (required)
+          </small>
+        {% if form.token.errors %}{{ renderErrors(form.token.errors) }}{% endif %}
         </div>
         {{ input(form.name) }}
         {{ input(form.password) }}
