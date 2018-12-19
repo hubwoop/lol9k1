@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% block title %}Pick phase for {{ event.game }} - Tourney by {{ event.creator }}{% endblock %}
 {% block body %}
   <h2>
     <a href="{{ url_for('game.game_detail', game=event.game_slug) }}">{{ event.game }}</a> - Tourney by

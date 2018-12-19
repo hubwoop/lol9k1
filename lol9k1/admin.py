@@ -17,7 +17,7 @@ def administration():
     config_rows = database.get_db().execute('select * from config').fetchall()
     start_date = database.get_party_start_date()
     end_date = database.get_party_end_date()
-    return render_template('admin.html', page_title="Administration", config_rows=config_rows,
+    return render_template('admin.html', config_rows=config_rows,
                            event_start_date=start_date, event_end_date=end_date)
 
 

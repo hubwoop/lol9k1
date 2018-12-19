@@ -1,4 +1,5 @@
 {% extends "layout.html" %}
+{% block title %}Games{% endblock %}
 {% block body %}
   {% if game_rows or request.args.get('not_voted') == 'True' %}
     <h2>Spiele</h2>

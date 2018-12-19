@@ -26,7 +26,6 @@ def create_tournament(game: str):
     prepared_schedule = events.prepare_schedule(fetch_date)
     flash("ALPHA: Use only in chrome and with activated JS!", STYLE.error)
     return render_template('tournament_creation.html',
-                           page_title="Tournament erstellen",
                            game_row=games_row,
                            creators=prepared_schedule.event_creators,
                            tournaments=prepared_schedule.formatted_events,

@@ -23,7 +23,7 @@ def invite():
             tokens_left = None
     cursor = db.execute('select token, used from invites where added_by = ?', [session.get('user_id')])
     invites = cursor.fetchall()
-    return render_template('invite.html', page_title="Manage invites", invites=invites, tokens_left=tokens_left)
+    return render_template('invite.html', invites=invites, tokens_left=tokens_left)
 
 
 @authentication.login_required

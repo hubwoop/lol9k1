@@ -27,12 +27,12 @@ def landing():
         else:
             cursor = db.execute(select_start_page(), [session.get('user_id')])
         game_rows = cursor.fetchall()
-        return render_template('landing/start.html', game_rows=game_rows, page_title="Start")
+        return render_template('landing/start.html', game_rows=game_rows)
     else:
         this_dir = os.path.dirname(os.path.realpath(__file__))
         video_dir = os.path.join(this_dir, 'static', 'vid')
         random_video = random.choice(os.listdir(video_dir))
-        return render_template('authentication/login.html', page_title="Start",
+        return render_template('authentication/login.html',
                                video_uri=url_for('static', filename=f'vid/{random_video}'))
 
 

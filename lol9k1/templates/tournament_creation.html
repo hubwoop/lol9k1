@@ -1,4 +1,10 @@
 {% extends "layout.html" %}
+{% block title %}Create a new {{ game_row.name }} Tournament{% endblock %}
+{% block head %}
+  {{ super() }}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/timetablejs.css') }}">
+    <script src="{{ url_for('static', filename='js/timetable/timetable.js') }}"></script>
+{% endblock %}
 {% block body %}
   <h2>{{ game_row.name }} - tourney creation - <span id="fetched-date"></span></h2>
   {% if previous_day or next_day %}

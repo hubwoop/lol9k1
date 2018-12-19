@@ -48,7 +48,7 @@ def login() -> None:
             return redirect(url_for('landing.landing'))
         else:
             flash('Invalid username and/or password.', STYLE.error)
-    return render_template('authentication/login.html', page_title="Login")
+    return render_template('authentication/login.html')
 
 
 def get_user_by_name(name) -> Optional[User]:
@@ -104,7 +104,6 @@ def register() -> None:
         except RegistrationError as registration_error:
             flash(str(registration_error), STYLE.error)
     return render_template('authentication/register.html',
-                           page_title="Register",
                            form=form,
                            token=request.args['token'] if 'token' in request.args else None)
 

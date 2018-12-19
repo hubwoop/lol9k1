@@ -14,7 +14,6 @@ bp = Blueprint('schedule', __name__, url_prefix='/schedule')
 def schedule():
     prepared_schedule = events.prepare_schedule()
     return render_template('schedule.html',
-                           page_title="Schedule",
                            creators=prepared_schedule.event_creators,
                            tournaments=prepared_schedule.formatted_events,
                            party_start=lol9k1.database.get_party_start_date(),
