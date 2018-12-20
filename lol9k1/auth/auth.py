@@ -8,7 +8,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 import lol9k1.database as database
 from lol9k1 import utilities
 from lol9k1.auth.forms import RegistrationForm
-from lol9k1.auth.types import TokenInfo, User, RegistrationError
+from lol9k1.auth.types import User, RegistrationError
 from lol9k1.utilities import STYLE
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
@@ -118,7 +118,7 @@ def add_user(form: RegistrationForm) -> None:
                    [request.form['name'], generate_password_hash(request.form['password']),
                     request.form['email'], request.form['gender'], is_admin, request.form['token']])
     except sqlite3.IntegrityError:
-        raise RegistrationError("Name not available.")
+        raise RegistrationError("Registration failed.")
 
     db.execute('update invites set used = 1 where token = ?', [request.form['token']])
     db.commit()

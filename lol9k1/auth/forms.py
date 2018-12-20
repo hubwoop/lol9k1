@@ -7,7 +7,7 @@ from wtforms.validators import InputRequired, EqualTo, Email, Optional, Length, 
 from wtforms.widgets import TextInput
 
 from lol9k1 import database
-from lol9k1.auth.types import TokenInfo
+from lol9k1.auth.types import Token
 
 
 class TokenField(Field):
@@ -24,26 +24,23 @@ class TokenField(Field):
 
     def process_formdata(self, token):
         if token:
+            print(f"ProvidedTOken {token[0]}")
             self.value = token[0]
-            self.data = database.get_invite_token(token[0])  # type: TokenInfo
+            self.data = database.get_unused_token(token[0])  # type: Token
 
 
 class ValidToken(object):
 
     """ A validator for tokens """
 
-    def __init__(self, message_invalid=None, message_used=None):
+    def __init__(self, message_invalid=None):
         self.message_invalid = message_invalid if message_invalid else "Invalid or used invite token"
-        self.message_used = message_used if message_used else "Token already used."
 
     def __call__(self, form, field):
         maybe_matched_token = field.data
+        print(f"ValidToken {field.data}")
         if not maybe_matched_token:
             raise ValidationError(self.message_invalid)
-        else:
-            matched_token = maybe_matched_token
-        if matched_token.used:
-            raise ValidationError(self.message_used)
 
 
 class UniqueUserEntry(object):
@@ -53,7 +50,7 @@ class UniqueUserEntry(object):
         self.message = message if message else f"{column} already reserved."
 
     def __call__(self, form, field):
-        possible_match = database.get_db().execute('select id from users where ? = ?', [self.column, field.data])
+        possible_match = database.get_db().execute(f'select id from users where {self.column} = ?', [field.data])
 
         if possible_match.fetchone():
             raise ValidationError(self.message)
@@ -69,7 +66,7 @@ class RegistrationForm(FlaskForm):
                     Length(min=3, message="Usernames must be at least 3 characters long"),
                     Length(max=30, message="Usernames have a maximum length of 30 characters.")],
         description='Please choose a name that everyone knows!',
-        render_kw={"placeholder": "Your Fancy Name"})
+        render_kw={"placeholder": "Your Fancy Name", "maxlength": 30, "minlength": 3})
 
     password = PasswordField(
         label='New Password',
@@ -81,9 +78,10 @@ class RegistrationForm(FlaskForm):
                     ' b̶̢̯̞̫͔͉̱̳̹̝̳̻͓̙̗̣͞ͅ(̴̙̗̙͉̞͚̯̩͞"͟͠҉̻̼̝̗̺̜̟͈̞͖͓̫̺̭̥j'
                     '̢̛̟̩͚̯͡s̷̶͏̼͇̮̺̼̰͉̘͔̩͎̹͘B̷̵̕͢͟'
                     '̰̝̟̖͉ͅŞ҉̖̯͇̬̳̮̟͕̲͙̘͡ͅo̵̴̧͔̯̖̙̗͉͚̕l͇̣͍̻̗̦͎͇͓̗̲̟̙͍͇̣̩͢͝j̴͡'
-                    '҉̦̱̤̬̱̣͍͙̯͕̖̯̳̕͢k̵̹̻̘̘̦̭͓̭̱̜̩͇̜͜͠d̴͖̜̙͇͙͓͉̞͈͓̳̤͔̗͟ ')
+                    '҉̦̱̤̬̱̣͍͙̯͕̖̯̳̕͢k̵̹̻̘̘̦̭͓̭̱̜̩͇̜͜͠d̴͖̜̙͇͙͓͉̞͈͓̳̤͔̗͟ ',
+        render_kw={"minlength": 8, "maxlength": 300})
 
-    confirm = PasswordField(label='Repeat Password')
+    confirm = PasswordField(label='Repeat Password', render_kw={"minlength": 8, "maxlength": 300})
 
     email = EmailField(label='E-Mail',
                        validators=[Optional(), Email(), UniqueUserEntry("email", "E-Mail already registered.")],

@@ -1,7 +1,7 @@
 from typing import NamedTuple
 
 
-class TokenInfo(NamedTuple):
+class Token(NamedTuple):
     token: str
     used: bool
     added_by: int
