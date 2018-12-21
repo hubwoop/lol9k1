@@ -1,70 +1,20 @@
-import typing
-
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SelectField, Field
+from wtforms import StringField, PasswordField, SelectField
 from wtforms.fields.html5 import EmailField
-from wtforms.validators import InputRequired, EqualTo, Email, Optional, Length, ValidationError
-from wtforms.widgets import TextInput
+from wtforms.validators import InputRequired, EqualTo, Email, Optional, Length
 
-from lol9k1 import database
-from lol9k1.auth.types import Token
-
-
-class TokenField(Field):
-
-    """ Wraps text input to return TokenInfo """
-
-    widget = TextInput()
-
-    def _value(self) -> str:
-        if self.data:
-            return self.value
-        else:
-            return ""
-
-    def process_formdata(self, token):
-        if token:
-            print(f"ProvidedTOken {token[0]}")
-            self.value = token[0]
-            self.data = database.get_unused_token(token[0])  # type: Token
-
-
-class ValidToken(object):
-
-    """ A validator for tokens """
-
-    def __init__(self, message_invalid=None):
-        self.message_invalid = message_invalid if message_invalid else "Invalid or used invite token"
-
-    def __call__(self, form, field):
-        maybe_matched_token = field.data
-        print(f"ValidToken {field.data}")
-        if not maybe_matched_token:
-            raise ValidationError(self.message_invalid)
-
-
-class UniqueUserEntry(object):
-
-    def __init__(self, column: str, message: typing.Optional[str] = None):
-        self.column = column
-        self.message = message if message else f"{column} already reserved."
-
-    def __call__(self, form, field):
-        possible_match = database.get_db().execute(f'select id from users where {self.column} = ?', [field.data])
-
-        if possible_match.fetchone():
-            raise ValidationError(self.message)
+from lol9k1.auth.forms.fields import TokenField
+from lol9k1.auth.forms.validators import ValidToken, UniqueUserEntry
 
 
 class RegistrationForm(FlaskForm):
-
     token = TokenField(label='Token', description='Somebody sent you this!', validators=[InputRequired(), ValidToken()])
 
     name = StringField(
         label='Username',
         validators=[InputRequired(), UniqueUserEntry("name", "Username already registered."),
-                    Length(min=3, message="Usernames must be at least 3 characters long"),
-                    Length(max=30, message="Usernames have a maximum length of 30 characters.")],
+                    Length(min=3, message="Username must be at least 3 characters long"),
+                    Length(max=30, message="A Username can have a maximum length of 30 characters.")],
         description='Please choose a name that everyone knows!',
         render_kw={"placeholder": "Your Fancy Name", "maxlength": 30, "minlength": 3})
 
@@ -92,5 +42,3 @@ class RegistrationForm(FlaskForm):
 
     gender = SelectField(label='Gender', choices=[
         ('optional', "Doesn't matter"), ('male', 'Male'), ('female', 'Female'), ('apache', 'Boeing AH-64')])
-
-
