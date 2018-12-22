@@ -2,6 +2,7 @@ from wtforms import Field
 from wtforms.widgets import TextInput
 
 from lol9k1 import database
+from lol9k1.auth.types import Token
 
 
 class TokenField(Field):

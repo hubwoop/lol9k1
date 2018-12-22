@@ -32,7 +32,7 @@ def landing():
         this_dir = os.path.dirname(os.path.realpath(__file__))
         video_dir = os.path.join(this_dir, 'static', 'vid')
         random_video = random.choice(os.listdir(video_dir))
-        return render_template('authentication/login.html',
+        return render_template('templates/login.html',
                                video_uri=url_for('static', filename=f'vid/{random_video}'))
 
 

@@ -8,6 +8,7 @@ from lol9k1.auth.forms.validators import ValidToken, UniqueUserEntry
 
 
 class RegistrationForm(FlaskForm):
+
     token = TokenField(label='Token', description='Somebody sent you this!', validators=[InputRequired(), ValidToken()])
 
     name = StringField(
