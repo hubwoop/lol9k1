@@ -11,7 +11,7 @@ from lol9k1.auth.forms import RegistrationForm
 from lol9k1.auth.types import User, RegistrationError
 from lol9k1.utilities import STYLE
 
-bp = Blueprint('auth', __name__, url_prefix='/auth', template_folder='/pages')
+bp = Blueprint('auth', __name__, url_prefix='/auth', template_folder='templates')
 
 
 def login_required(view):
@@ -48,7 +48,7 @@ def login() -> None:
             return redirect(url_for('landing.landing'))
         else:
             flash('Invalid username and/or password.', STYLE.error)
-    return render_template('login.html')
+    return render_template('auth/login.html')
 
 
 def get_user_by_name(name) -> Optional[User]:
@@ -103,7 +103,7 @@ def register() -> None:
             return redirect(url_for('landing.landing'))
         except RegistrationError as registration_error:
             flash(str(registration_error), STYLE.error)
-    return render_template('register.html',
+    return render_template('auth/register.html',
                            form=form,
                            token=request.args['token'] if 'token' in request.args else None)
 
