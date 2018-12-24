@@ -68,10 +68,7 @@ def add_game():
     games_row = cursor.fetchone()
     if games_row:
         game_id = games_row[0]
-        flash(
-            Markup(f'Game <a href="#gameRow-{game_id}">{title}</a> has already been added!'),
-            STYLE.error
-        )
+        flash(Markup(f'Game <a href="#gameRow-{game_id}">{title}</a> has already been added!'), STYLE.error)
     else:
         game_id = add_game_to_db()
         flash(Markup(f'You added game (<a href="#gameRow-{game_id}">{title}</a>).'), STYLE.success)
