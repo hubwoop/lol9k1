@@ -1,7 +1,7 @@
 import json
 import sqlite3
 import uuid
-from typing import Optional
+from typing import Optional, NamedTuple
 
 import click
 from flask import current_app, g
@@ -10,6 +10,12 @@ from slugify import slugify
 from igdb_api_python.igdb import igdb
 from lol9k1 import utilities
 from lol9k1.auth.types import Token
+
+
+class TokenRow(NamedTuple):
+    token: str
+    used: bool
+    added_by: int
 
 
 def get_db():

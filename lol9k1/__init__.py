@@ -61,8 +61,8 @@ def create_app(test_config=None):
     from . import invite
     app.register_blueprint(invite.bp)
 
-    from . import landing
-    app.register_blueprint(landing.bp)
+    from lol9k1.home import home
+    app.register_blueprint(home.bp)
 
     from . import schedule
     app.register_blueprint(schedule.bp)

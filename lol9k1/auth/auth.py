@@ -8,7 +8,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 import lol9k1.database as database
 from lol9k1 import utilities
 from lol9k1.auth.forms import RegistrationForm
-from lol9k1.auth.types import User, RegistrationError
+from lol9k1.auth.types import UserRow, RegistrationError
 from lol9k1.utilities import STYLE
 
 bp = Blueprint('auth', __name__, url_prefix='/auth', template_folder='templates')
@@ -51,16 +51,16 @@ def login() -> None:
     return render_template('auth/login.html')
 
 
-def get_user_by_name(name) -> Optional[User]:
+def get_user_by_name(name) -> Optional[UserRow]:
     try:
         cursor = database.get_db().execute('select * from users where name = (?)', [name])
     except sqlite3.Error:
         flash(utilities.NAVY_SEAL, STYLE.warning)
         return None
-    return User(*cursor.fetchone())
+    return UserRow(*cursor.fetchone())
 
 
-def initialize_session_for(user):
+def initialize_session_for(user: UserRow) -> None:
     session['user_id'] = int(user.id)
     session['username'] = user.name
     session['logged_in'] = True

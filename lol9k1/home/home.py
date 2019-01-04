@@ -11,9 +11,10 @@ from slugify import slugify
 from lol9k1 import utilities
 from lol9k1.auth import auth
 from lol9k1.database import get_db
+from lol9k1.home.queries import select_start_page
 from lol9k1.utilities import STYLE
 
-bp = Blueprint('landing', __name__)
+bp = Blueprint('landing', __name__, template_folder='templates')
 
 
 @bp.route('/', methods=['GET'])
@@ -27,36 +28,13 @@ def landing():
         else:
             cursor = db.execute(select_start_page(), [session.get('user_id')])
         game_rows = cursor.fetchall()
-        return render_template('landing/start.html', game_rows=game_rows)
+        return render_template('start.html', game_rows=game_rows)
     else:
         this_dir = os.path.dirname(os.path.realpath(__file__))
         video_dir = os.path.join(this_dir, 'static', 'vid')
         random_video = random.choice(os.listdir(video_dir))
         return render_template('auth/login.html',
                                video_uri=url_for('static', filename=f'vid/{random_video}'))
-
-
-def select_start_page(without_users_vote=False, order_by_score=False):
-    return f'''
-select
-  games.id,
-  games.name,
-  games.slug,
-  games.max_players,
-  games.description,
-  games.no_drm,
-  games.low_spec,
-  games.available,
-  users.name as added_by_user,
-  sum(votes.vote) as score,
-  voted.vote as this_sessions_user_vote
-from games
-  inner join votes on games.id = votes.game
-  inner join users on games.added_by = users.id
-  left join votes voted on games.id = voted.game and voted.user = ? {'where voted.vote isnull' if without_users_vote else ''}
-group by games.id
-order by {'score desc' if order_by_score else 'games.name asc'}
-'''
 
 
 @auth.login_required
@@ -76,31 +54,44 @@ def add_game():
 
 
 @auth.login_required
-@bp.route('/api/vote/<game>/<vote>', methods=['POST'])
-def game_vote(game, vote):
-    vote = int(vote)
+@bp.route('/vote/<game>/<vote_value>', methods=['POST'])
+def game_vote(game, vote_value):
+    vote_value = int(vote_value)
     game = int(game)
     db = get_db()
-    if abs(vote) != 1 or not db.execute('select id from games where id = ?', [game]).fetchone():
-        flash(utilities.NAVY_SEAL, STYLE.warning)
-        return redirect(url_for('landing.landing'))
+    if abs(vote_value) != 1 or not db.execute('select id from games where id = ?', [game]).fetchone():
+        return invalid_vote()
     user = session.get('user_id')
-    cursor = db.execute('select vote from votes where user = ? and game = ?', [user, game])
-    result = cursor.fetchone()
-    if result:
-        if result[0] == vote:
-            flash("You already voted for that!", STYLE.error)
-            return redirect(url_for('landing.landing'))
-        else:
-            db.execute('update votes set vote = ? where user = ? and game = ?', [vote, user, game])
-            db.commit()
-            flash("Your vote has been changed :)!", STYLE.success)
-            return redirect(url_for('landing.landing', _anchor=f"gameRow-{game}"))
+    previous_vote_row = db.execute('select vote from votes where user = ? and game = ?', [user, game]).fetchone()
+    previous_vote = previous_vote_row[0] if previous_vote_row else None
+    if previous_vote:
+        return change_vote(user, game, previous_vote, vote_value)
     else:
-        db.execute('insert into votes (user, game, vote) values (?, ?, ?)', [user, game, vote])
+        return vote(game, user, vote_value)
+
+
+def invalid_vote():
+    flash(utilities.NAVY_SEAL, STYLE.warning)
+    return redirect(url_for('landing.landing'))
+
+
+def change_vote(user, game, old_vote, new_vote):
+    db = get_db()
+    if old_vote == new_vote:
+        db.execute('delete from votes where user = ? and game = ?', [user, game])
+    else:
+        db.execute('update votes set vote = ? where user = ? and game = ?', [new_vote, user, game])
         db.commit()
-        flash("Thanks for voting :)", STYLE.success)
-        return redirect(url_for('landing.landing', _anchor=f"gameRow-{game}"))
+    flash("Your vote has been changed :)!", STYLE.success)
+    return redirect(url_for('landing.landing', _anchor=f"gameRow-{game}"))
+
+
+def vote(game, user, vote_value):
+    db = get_db()
+    db.execute('insert into votes (user, game, vote) values (?, ?, ?)', [user, game, vote_value])
+    db.commit()
+    flash("Thanks for voting :)", STYLE.success)
+    return redirect(url_for('landing.landing', _anchor=f"gameRow-{game}"))
 
 
 @auth.login_required
@@ -109,13 +100,14 @@ def delete_game(game_id: int):
     db = get_db()
     game = db.execute('select name from games where id = ?', [game_id]).fetchone()[0]
     try:
-        db.execute('delete from votes where game = ?', [game_id])
-        db.execute('delete from events where game = ?', [game_id])
-        db.execute('delete from games where id = ?', [game_id])
+        db.executescript('delete from votes where game = ?;'
+                         'delete from events where game = ?;'
+                         'delete from games where id = ?;', [game_id, game_id, game_id])
         db.commit()
     except sqlite3.Error as e:
         flash(f'Something went wrong during deletion of game "{game}": {e}', STYLE.error)
-    flash(f"Game {game} deleted.", STYLE.message)
+    else:
+        flash(f"Game {game} deleted.", STYLE.message)
     return redirect(url_for('landing.landing'))
 
 

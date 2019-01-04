@@ -7,7 +7,7 @@ class Token(NamedTuple):
     added_by: int
 
 
-class User(NamedTuple):
+class UserRow(NamedTuple):
     id: int
     name: str
     email: str
