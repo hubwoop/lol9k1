@@ -42,4 +42,4 @@ class RegistrationForm(FlaskForm):
                        render_kw={"placeholder": "1337-h4X0r@russia.gov"})
 
     gender = SelectField(label='Gender', choices=[
-        ('optional', "Doesn't matter"), ('male', 'Male'), ('female', 'Female'), ('apache', 'Boeing AH-64')])
+        ('0', "Doesn't matter"), ('1', 'Male'), ('2', 'Female'), ('3', 'Boeing AH-64')])

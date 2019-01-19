@@ -18,6 +18,5 @@ class TokenField(Field):
 
     def process_formdata(self, token):
         if token:
-            print(f"ProvidedTOken {token[0]}")
             self.value = token[0]
             self.data = database.get_unused_token(token[0])  # type: Token

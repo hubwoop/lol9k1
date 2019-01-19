@@ -1,4 +1,5 @@
 import os
+from typing import Union
 
 import dateutil
 from flask import Flask
@@ -44,9 +45,8 @@ def create_app(test_config=None):
         return native.strftime(the_format)
 
     @app.template_filter('gender')
-    def translate_gender(gender: int, fmt=None) -> str:
-        gender = utilities.GENDER_INT_TO_STRING[int(gender)]
-        return gender
+    def translate_gender(gender: Union[int, str], fmt=None) -> str:
+        return utilities.GENDER_INT_TO_STRING[int(gender)]
 
     @app.template_filter('slugify')
     def translate_gender(string: str, fmt=None) -> str:

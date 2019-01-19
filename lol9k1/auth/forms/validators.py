@@ -13,7 +13,6 @@ class ValidToken(object):
 
     def __call__(self, form, field):
         maybe_matched_token = field.data
-        print(f"ValidToken {field.data}")
         if not maybe_matched_token:
             raise ValidationError(self.message_invalid)
 
