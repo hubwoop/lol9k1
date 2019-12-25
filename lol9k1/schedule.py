@@ -13,6 +13,8 @@ bp = Blueprint('schedule', __name__, url_prefix='/schedule')
 @bp.route('/', methods=['GET', 'POST'])
 def schedule():
     prepared_schedule = events.prepare_schedule()
+    if not prepared_schedule:
+        return "The administrators have jet to set a date for this LAN."
     return render_template('schedule.html',
                            creators=prepared_schedule.event_creators,
                            tournaments=prepared_schedule.formatted_events,

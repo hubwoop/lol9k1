@@ -2,7 +2,7 @@ import json
 import random
 from collections import namedtuple
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 import dateutil.parser
 from flask import session, Blueprint, request, redirect, url_for, flash, render_template
@@ -272,8 +272,10 @@ def delete_event(event_id):
         return redirect(url_for('landing.landing'))
 
 
-def prepare_schedule(fetch_date=None) -> Schedule:
+def prepare_schedule(fetch_date=None) -> Optional[Schedule]:
     end, start = get_party_start_and_end()
+    if not start or not end:
+        return None
     if not fetch_date:
         fetch_date = decide_which_date_to_fetch(end, start)
     events = get_all_by_date(fetch_date)
@@ -306,7 +308,11 @@ def handle_event_post(game_id) -> (str, STYLE):
     return "Tournament erstellt!", STYLE.success
 
 
-def get_party_start_and_end():
+def get_party_start_and_end() -> (Optional[datetime], Optional[datetime]):
+    start = get_party_start_date()
+    end = get_party_end_date()
+    if not start or not end:
+        return None, None
     start = dateutil.parser.parse(get_party_start_date())
     end = dateutil.parser.parse(get_party_end_date())
     return end, start
