@@ -1,11 +1,6 @@
 import os
-from typing import Union
-
-import dateutil
 from flask import Flask
 from flaskext.markdown import Markdown
-from slugify import slugify
-from lol9k1 import utilities
 
 
 def create_app(test_config=None):
@@ -36,25 +31,13 @@ def create_app(test_config=None):
     except OSError:
         pass
 
-    @app.template_filter('strftime')
-    def format_date_time_string(date: str, fmt=None) -> str:
-        date = dateutil.parser.parse(date)
-        native = date.replace(tzinfo=None)
-        the_format = '%d.%m.%y <strong>%H:%M</strong>'
-        return native.strftime(the_format)
-
-    @app.template_filter('gender')
-    def translate_gender(gender: Union[int, str], fmt=None) -> str:
-        return utilities.GENDER_INT_TO_STRING[int(gender)]
-
-    @app.template_filter('slugify')
-    def translate_gender(string: str, fmt=None) -> str:
-        return slugify(string)
+    from . import template_filters
+    template_filters.register_on(app)
 
     from . import database
     database.init_app(app)
 
-    from lol9k1.auth import auth
+    from .auth import auth
     app.register_blueprint(auth.bp)
 
     from . import invite
