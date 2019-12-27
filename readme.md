@@ -3,6 +3,24 @@
 
 Organize your lan party!
 
+## Recommended Setup
+### On macOS and Linux: 
+- `python3 -m venv lol9k1env`
+- `source lol9k1env/bin/activate`
+- `pip install -r lol9k1/requirements.txt`
+- `export FLASK_APP=lol9k1`
+- `flask init-db`
+- Generate an admin token for registration: `flask create-admin`
+- Start the lol9k1: `flask run`
+### On Windows: 
+- `py -m venv lol9k1env`
+- `.\lol9k1env\Scripts\activate`
+- `pip install -r lol9k1\requirements.txt`
+- `set FLASK_APP=lol9k1`
+- `flask init-db`
+- `flask create-admin`
+- `flask run`
+
 
 ## Built With
 

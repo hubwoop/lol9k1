@@ -5,8 +5,7 @@ import dateutil
 from flask import Flask
 from flaskext.markdown import Markdown
 from slugify import slugify
-
-from lol9k1 import utilities
+from . import utilities
 
 
 def create_app(test_config=None):
