@@ -1,4 +1,4 @@
-FROM tiangolo/uwsgi-nginx-flask:python3.6
+FROM tiangolo/uwsgi-nginx-flask:python3.7
 ENV TZ=Europe/Berlin
 ENV LISTEN_PORT 80
 EXPOSE 80
