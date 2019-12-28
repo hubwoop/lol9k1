@@ -11,16 +11,20 @@ Organize your lan party!
 - `export FLASK_APP=lol9k1`
 - `flask init-db`
 - Generate an admin token for registration: `flask create-admin`
-- Start the lol9k1: `flask run`
+- Start lol9k1: `flask run`
 ### On Windows: 
 - `py -m venv lol9k1env`
 - `.\lol9k1env\Scripts\activate`
 - `pip install -r lol9k1\requirements.txt`
 - `set FLASK_APP=lol9k1`
 - `flask init-db`
-- `flask create-admin`
-- `flask run`
+- Generate an admin token for registration: `flask create-admin`
+- Start lol9k1: `flask run`
 
+## When deploying
+You might want to use the same secret every time you start lol9k1. 
+This allows user to stay authenticated. To do this pass a good secret
+via env var `SECRET_KEY`. If not set, a random string will be used as secret.
 
 ## Built With
 

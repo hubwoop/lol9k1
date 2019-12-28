@@ -7,10 +7,12 @@ def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_mapping(
         DATABASE=os.path.join(app.root_path, 'lol9k1.db'),
-        SECRET_KEY=os.urandom(24),
         IGDB_API_KEY=os.environ.get('IGDB_API_KEY'),
         MAX_INVITE_TOKENS=3,
     )
+    secret = os.environ.get('SECRET_KEY', default=os.urandom(24))
+    app.config["SECRET_KEY"] = secret
+
     if os.environ.get('DEBUGGING', default="False").capitalize() == 'True':
         app.config['SECRET_KEY'] = 'wat'
 
