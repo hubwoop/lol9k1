@@ -25,8 +25,8 @@ PickDetails = namedtuple('PickDetails', ['pick_order', 'currently_picking'])
 bp = Blueprint('event', __name__, url_prefix='/event')
 
 
-@auth.login_required
 @bp.route('/<int:event_id>', methods=['GET', 'POST'])
+@auth.login_required
 def event(event_id):
     event_details = get_details(event_id)  # type: Details
     if not event_details:
@@ -106,16 +106,16 @@ def handle_captains_post(event_id):
         update_captains(event_id, captains)
 
 
-@auth.login_required
 @bp.route('/<int:event_id>/stop-pick-phase', methods=['GET'])
+@auth.login_required
 def stop_pick_phase(event_id):
     if get_state(event_id) == 'pickphase' and session.get('user_id') == get_creator_of(event_id):
         end_pick_state_in_db(event_id)
     return redirect(url_for('.event', event_id=event_id))
 
 
-@auth.login_required
 @bp.route('/<int:event_id>/captain-of', methods=['POST'])
+@auth.login_required
 def get_teams_user_is_captain_of(event_id):
     captains = get_captains_from_db(event_id)
     leading = []
@@ -125,8 +125,8 @@ def get_teams_user_is_captain_of(event_id):
     return json.dumps(leading)
 
 
-@auth.login_required
 @bp.route('/<int:event_id>/state')
+@auth.login_required
 def get_state_api(event_id):
     teams = get_teams_for_json(event_id)
     pick_details = get_pick_details(event_id)
@@ -134,8 +134,8 @@ def get_state_api(event_id):
     return json.dumps({'teams': teams, 'pick_details': pick_details._asdict(), 'state': state})
 
 
-@auth.login_required
 @bp.route('/<int:event_id>/possible-teammates')
+@auth.login_required
 def get_possible_teammates_api(event_id):
     possible_teammates = get_possible_teammates_for(event_id)
     teammates = []
@@ -146,8 +146,8 @@ def get_possible_teammates_api(event_id):
     return json.dumps(teammates)
 
 
-@auth.login_required
 @bp.route('/<int:event_id>/team/<int:team_id>/add-mate', methods=['POST'])
+@auth.login_required
 def add_teammate_api(event_id, team_id):
     db = get_db()
     currently_picking_team = get_currently_picking(event_id)
@@ -179,8 +179,8 @@ def advance_currently_picking(event_id, currently_picking_team):
     db.commit()
 
 
-@auth.login_required
 @bp.route('/<int:event_id>/team/<int:team_id>/skip', methods=['POST'])
+@auth.login_required
 def skip_picking_teammate_api(event_id, team_id):
     currently_picking_team = get_currently_picking(event_id)
     event_state = get_state(event_id)
@@ -203,8 +203,8 @@ def user_allowed_to_skip(event_id, currently_picking_team, team_id, event_state)
             and team_id == currently_picking_team)
 
 
-@auth.login_required
 @bp.route('/team/<int:team_id>/name', methods=['POST'])
+@auth.login_required
 def set_team_name_api(team_id):
     try:
         captain = get_captain(team_id)
@@ -219,8 +219,8 @@ def set_team_name_api(team_id):
     return json.dumps("yep :)!")
 
 
-@auth.login_required
 @bp.route('/<int:event_id>/possible-captains')
+@auth.login_required
 def get_possible_captains_api(event_id):
     db = get_db()
     eligible_users = db.execute('''
@@ -233,8 +233,8 @@ def get_possible_captains_api(event_id):
     return json.dumps(possible_captains)
 
 
-@auth.login_required
 @bp.route('/<int:event_id>/captains', methods=['GET', 'DELETE', 'UPDATE', 'POST'])
+@auth.login_required
 def event_captains_api(event_id):
     if request.method == 'GET':
         captains = get_captains_from_db(event_id)
@@ -247,8 +247,8 @@ def event_captains_api(event_id):
         return utilities.NAVY_SEAL
 
 
-@auth.login_required
 @bp.route('/<int:event_id>/participants', methods=['GET', 'UPDATE'])
+@auth.login_required
 def event_participants_api(event_id):
     if request.method == 'GET':
         participants = get_participants(event_id)
@@ -260,8 +260,8 @@ def event_participants_api(event_id):
         return utilities.NAVY_SEAL
 
 
-@auth.login_required
 @bp.route('/delete/<int:event_id>')
+@auth.login_required
 def delete_event(event_id):
     if auth.current_user_is_admin() or get_creator_of(event_id) == session.get('user_id'):
         game = delete_with_all_dependencies_in_database(event_id)

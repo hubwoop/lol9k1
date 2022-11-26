@@ -10,8 +10,8 @@ from lol9k1.utilities import STYLE
 bp = Blueprint('invite', __name__, url_prefix='/invite')
 
 
-@authentication.login_required
 @bp.route('/invite')
+@authentication.login_required
 def invite():
     db = get_db()
     cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
@@ -26,8 +26,8 @@ def invite():
     return render_template('invite.html', invites=invites, tokens_left=tokens_left)
 
 
-@authentication.login_required
 @bp.route('/invite/generate')
+@authentication.login_required
 def generate_invite():
     db = get_db()
     cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
@@ -43,8 +43,8 @@ def generate_invite():
     return redirect(url_for('invite.invite'))
 
 
-@authentication.login_required
 @bp.route('/invite/delete/<token>')
+@authentication.login_required
 def delete_invite(token):
     db = get_db()
     db.execute('delete from invites where token = ? and added_by = ?', [token, session.get('user_id')])

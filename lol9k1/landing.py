@@ -59,8 +59,8 @@ order by {'score desc' if order_by_score else 'games.name asc'}
 '''
 
 
-@auth.login_required
 @bp.route('/add', methods=['POST'])
+@auth.login_required
 def add_game():
     db = get_db()
     title = request.form['title']
@@ -75,8 +75,8 @@ def add_game():
     return redirect(url_for('landing.landing'))
 
 
-@auth.login_required
 @bp.route('/api/vote/<game>/<vote>', methods=['POST'])
+@auth.login_required
 def game_vote(game, vote):
     vote = int(vote)
     game = int(game)
@@ -103,8 +103,8 @@ def game_vote(game, vote):
         return redirect(url_for('landing.landing', _anchor=f"gameRow-{game}"))
 
 
-@auth.login_required
 @bp.route('/delete/game/<int:game_id>')
+@auth.login_required
 def delete_game(game_id: int):
     db = get_db()
     game = db.execute('select name from games where id = ?', [game_id]).fetchone()[0]

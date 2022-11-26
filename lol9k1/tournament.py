@@ -9,8 +9,8 @@ from lol9k1.utilities import STYLE
 bp = Blueprint('tournament', __name__, url_prefix='/tournament')
 
 
-@auth.login_required
 @bp.route('/create/<game>', methods=['GET', 'POST'])
+@auth.login_required
 def create_tournament(game: str):
     db = get_db()
     games_row = db.execute('select * from games where slug = ?', [game]).fetchone()

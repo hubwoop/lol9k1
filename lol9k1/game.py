@@ -7,8 +7,8 @@ from lol9k1.database import get_db
 bp = Blueprint('game', __name__, url_prefix='/game')
 
 
-@auth.login_required
 @bp.route('/<game>')
+@auth.login_required
 def game_detail(game):
     db = get_db()
     game_row = db.execute('select * from games where slug = ?', [game]).fetchone()

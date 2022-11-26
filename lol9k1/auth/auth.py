@@ -16,11 +16,10 @@ bp = Blueprint('auth', __name__, url_prefix='/auth', template_folder='templates'
 
 def login_required(view):
     @functools.wraps(view)
-    def wrapped_view(**kwargs):
+    def wrapped_view(*args, **kwargs):
         if g.user is None:
-            return redirect(url_for('auth.login'))
-        return view(**kwargs)
-
+            return redirect(url_for('auth.login', next=request.url))
+        return view(*args, **kwargs)
     return wrapped_view
 
 
@@ -30,7 +29,6 @@ def admin_required(view):
         if not current_user_is_admin():
             return abort(403)
         return view(**kwargs)
-
     return wrapped_view
 
 
@@ -68,8 +66,8 @@ def initialize_session_for(user):
         session['is_admin'] = True
 
 
-@login_required
 @bp.route('/logout')
+@login_required
 def logout() -> None:
     session.pop('logged_in', None)
     session.pop('user_id', None)

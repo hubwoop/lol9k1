@@ -9,8 +9,8 @@ from lol9k1.auth import auth
 bp = Blueprint('schedule', __name__, url_prefix='/schedule')
 
 
-@auth.login_required
 @bp.route('/', methods=['GET', 'POST'])
+@auth.login_required
 def schedule():
     prepared_schedule = events.prepare_schedule()
     if not prepared_schedule:
