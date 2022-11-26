@@ -10,8 +10,8 @@ bp = Blueprint('admin', __name__, url_prefix='/admin')
 INVALID_DATES = '<a href="https://www.youtube.com/watch?v=HGpr4r9X8DE">Ehh... No</a>. Choose a valid time span.'
 
 
-@auth.admin_required
 @bp.route('/admin', methods=['GET', 'POST'])
+@auth.admin_required
 def administration():
     handle_form_posts()
     config_rows = database.get_db().execute('select * from config').fetchall()
