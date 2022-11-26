@@ -15,6 +15,7 @@
                 <label for="password">Password</label>
                 <input type="password" class="form-control" placeholder="Password" name=password>
             </div>
+            <input type="hidden" value="{{ request.args.get('next', '') }}" name=redirect_to>
             <button type="submit" class="btn btn-primary">Login</button>
         </form>
         <a href="{{ url_for('auth.register') }}">Register</a>
