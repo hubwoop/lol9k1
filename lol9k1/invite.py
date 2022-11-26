@@ -1,6 +1,6 @@
 import uuid
 
-from flask import session, current_app, render_template, abort, flash, redirect, url_for, Blueprint
+from flask import session, current_app, render_template, abort, flash, redirect, url_for, Blueprint, Response
 from markupsafe import Markup
 
 import lol9k1.auth.auth as authentication
@@ -12,7 +12,7 @@ bp = Blueprint('invite', __name__, url_prefix='/invite')
 
 @bp.route('/invite')
 @authentication.login_required
-def invite():
+def invite() -> str:
     db = get_db()
     cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
     if authentication.current_user_is_admin():
@@ -28,7 +28,7 @@ def invite():
 
 @bp.route('/invite/generate')
 @authentication.login_required
-def generate_invite():
+def generate_invite() -> Response:
     db = get_db()
     cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
     tokens = cursor.fetchall()[0][0]
@@ -45,7 +45,7 @@ def generate_invite():
 
 @bp.route('/invite/delete/<token>')
 @authentication.login_required
-def delete_invite(token):
+def delete_invite(token) -> Response:
     db = get_db()
     db.execute('delete from invites where token = ? and added_by = ?', [token, session.get('user_id')])
     db.commit()

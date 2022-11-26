@@ -11,7 +11,7 @@ bp = Blueprint('schedule', __name__, url_prefix='/schedule')
 
 @bp.route('/', methods=['GET', 'POST'])
 @auth.login_required
-def schedule():
+def schedule() -> str:
     prepared_schedule = events.prepare_schedule()
     if not prepared_schedule:
         return "The administrators have yet to set a date for this LAN."

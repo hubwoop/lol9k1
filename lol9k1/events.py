@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import List, Optional
 
 import dateutil.parser
-from flask import session, Blueprint, request, redirect, url_for, flash, render_template
+from flask import session, Blueprint, request, redirect, url_for, flash, render_template, Response
 
 import lol9k1.utilities as utilities
 from lol9k1.auth import auth
@@ -262,7 +262,7 @@ def event_participants_api(event_id):
 
 @bp.route('/delete/<int:event_id>')
 @auth.login_required
-def delete_event(event_id):
+def delete_event(event_id) -> Response:
     if auth.current_user_is_admin() or get_creator_of(event_id) == session.get('user_id'):
         game = delete_with_all_dependencies_in_database(event_id)
         flash(f"Deleted event {event_id}.", STYLE.message)
@@ -330,7 +330,7 @@ def decide_which_date_to_fetch(end, start) -> datetime:
     return fetch_date
 
 
-def get_surrounding_dates_if_possible(end, fetch_date, start):
+def get_surrounding_dates_if_possible(end, fetch_date, start) -> (datetime, datetime):
     next_day = None
     previous_day = None
     if fetch_date.day + 1 <= end.day:
@@ -340,7 +340,7 @@ def get_surrounding_dates_if_possible(end, fetch_date, start):
     return next_day, previous_day
 
 
-def format_events(fetch_date, events):
+def format_events(fetch_date, events) -> List[dict]:
     formatted_events = []
     for row in events:
         start = define_start(fetch_date, row)

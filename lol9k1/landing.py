@@ -3,7 +3,7 @@ import random
 import sqlite3
 
 from flask import (
-    Blueprint, flash, redirect, render_template, request, session, url_for
+    Blueprint, flash, redirect, render_template, request, session, url_for, Response
 )
 from markupsafe import Markup
 from slugify import slugify
@@ -17,7 +17,7 @@ bp = Blueprint('landing', __name__)
 
 
 @bp.route('/', methods=['GET'])
-def landing():
+def landing() -> str:
     if session.get('logged_in'):
         db = get_db()
         if request.args.get('not_voted', default='False') == 'True':
@@ -36,7 +36,7 @@ def landing():
                                video_uri=url_for('static', filename=f'vid/{random_video}'))
 
 
-def select_start_page(without_users_vote=False, order_by_score=False):
+def select_start_page(without_users_vote=False, order_by_score=False) -> str:
     return f'''
 select
   games.id,
@@ -61,7 +61,7 @@ order by {'score desc' if order_by_score else 'games.name asc'}
 
 @bp.route('/add', methods=['POST'])
 @auth.login_required
-def add_game():
+def add_game() -> Response:
     db = get_db()
     title = request.form['title']
     cursor = db.execute('select id from games where slug = ?', [slugify(request.form['title'])])
@@ -77,7 +77,7 @@ def add_game():
 
 @bp.route('/api/vote/<game>/<vote>', methods=['POST'])
 @auth.login_required
-def game_vote(game, vote):
+def game_vote(game, vote) -> Response:
     vote = int(vote)
     game = int(game)
     db = get_db()
@@ -105,7 +105,7 @@ def game_vote(game, vote):
 
 @bp.route('/delete/game/<int:game_id>')
 @auth.login_required
-def delete_game(game_id: int):
+def delete_game(game_id: int) -> Response:
     db = get_db()
     game = db.execute('select name from games where id = ?', [game_id]).fetchone()[0]
     try:
@@ -119,14 +119,14 @@ def delete_game(game_id: int):
     return redirect(url_for('landing.landing'))
 
 
-def add_game_to_db():
+def add_game_to_db() -> int:
     description, max_players, low_spec, available, no_drm = __validate_input()
     __add_games_row(available, description, low_spec, max_players, no_drm, request.form['title'])
     game = __add_games_vote_row()
     return game
 
 
-def __add_games_row(available, description, low_spec, max_players, no_drm, title):
+def __add_games_row(available, description, low_spec, max_players, no_drm, title) -> None:
     db = get_db()
     db.execute(
         'insert into games (name, slug, max_players, description, no_drm, available, low_spec, added_by) '
@@ -136,7 +136,7 @@ def __add_games_row(available, description, low_spec, max_players, no_drm, title
     db.commit()
 
 
-def __add_games_vote_row():
+def __add_games_vote_row() -> int:
     db = get_db()
     game = db.execute('select id from games where name = ?', [request.form['title']]).fetchone()[0]
     db.execute('insert into votes (user, game, vote) values (?, ?, ?)', [session.get('user_id'), game, 1])
@@ -144,7 +144,7 @@ def __add_games_vote_row():
     return game
 
 
-def __validate_input():
+def __validate_input() -> (str, str, str, str, str):
     max_players = None
     if 'max_players' in request.form:
         try:

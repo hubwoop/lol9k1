@@ -12,7 +12,7 @@ INVALID_DATES = '<a href="https://www.youtube.com/watch?v=HGpr4r9X8DE">Ehh... No
 
 @bp.route('/admin', methods=['GET', 'POST'])
 @auth.admin_required
-def administration():
+def administration() -> str:
     handle_form_posts()
     config_rows = database.get_db().execute('select * from config').fetchall()
     start_date = database.get_party_start_date()

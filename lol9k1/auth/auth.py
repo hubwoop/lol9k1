@@ -1,8 +1,8 @@
 import functools
 import sqlite3
-from typing import Optional
+from typing import Optional, Union
 
-from flask import (Blueprint, flash, g, redirect, render_template, request, session, url_for, abort)
+from flask import (Blueprint, flash, g, redirect, render_template, request, session, url_for, abort, Response)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import lol9k1.database as database
@@ -37,7 +37,7 @@ def current_user_is_admin() -> bool:
 
 
 @bp.route('/login', methods=('GET', 'POST'))
-def login() -> None:
+def login() -> Union[Response, str]:
     if request.method == 'POST':
         user = get_user_by_name(request.form['username'])
         if user and check_password_hash(user.password, request.form['password']):
@@ -68,7 +68,7 @@ def initialize_session_for(user):
 
 @bp.route('/logout')
 @login_required
-def logout() -> None:
+def logout() -> Response:
     session.pop('logged_in', None)
     session.pop('user_id', None)
     session.pop('is_admin', None)
@@ -87,12 +87,12 @@ def load_logged_in_user() -> None:
 
 
 @bp.route('/register/<string:token>')
-def register_with_token(token) -> None:
+def register_with_token(token) -> Response:
     return redirect(url_for('.register', token=token))
 
 
 @bp.route('/register', methods=['GET', 'POST'])
-def register() -> None:
+def register() -> Union[Response, str]:
     form = RegistrationForm()
     if form.validate_on_submit():
         try:

@@ -63,7 +63,7 @@ def get_party_end_date() -> str:
 
 @click.command('init-db')
 @with_appcontext
-def init_db_command():
+def init_db_command() -> None:
     """Clear the existing data and create new tables."""
     init_db()
     click.echo('Initialized the database.')
@@ -71,7 +71,7 @@ def init_db_command():
 
 @click.command('create-admin')
 @with_appcontext
-def create_admin_command():
+def create_admin_command() -> None:
     db = get_db()
     token = uuid.uuid4().hex[:12]
     db.execute('insert into invites (token, added_by) values (?, ?)', [token, 0])
@@ -81,7 +81,7 @@ def create_admin_command():
 
 @click.command('add-missing-slugs')
 @with_appcontext
-def add_slugs_if_missing():
+def add_slugs_if_missing() -> str:
     db = get_db()
     cursor = db.execute('select id, name, slug from games')
     game_names = cursor.fetchall()
@@ -94,7 +94,7 @@ def add_slugs_if_missing():
 
 @click.command('update-igdb-ids')
 @with_appcontext
-def add_igdb_ids_if_missing():
+def add_igdb_ids_if_missing() -> str:
     igdb_connection = utilities.get_igdb()
     db = get_db()
     cursor = db.execute('select id, name, igdb_id from games')

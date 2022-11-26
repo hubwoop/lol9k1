@@ -9,7 +9,7 @@ bp = Blueprint('game', __name__, url_prefix='/game')
 
 @bp.route('/<game>')
 @auth.login_required
-def game_detail(game):
+def game_detail(game) -> str:
     db = get_db()
     game_row = db.execute('select * from games where slug = ?', [game]).fetchone()
     games_events = events.get_all_by_game(game_row[0])
