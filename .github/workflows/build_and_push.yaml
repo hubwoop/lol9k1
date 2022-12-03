@@ -1,4 +1,4 @@
-name: e2e
+name: build_and_push
 on:
   push:
     branches:
