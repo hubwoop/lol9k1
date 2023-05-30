@@ -5,25 +5,7 @@ from flaskext.markdown import Markdown
 
 def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
-    app.config.from_mapping(
-        DATABASE=os.path.join(app.root_path, 'lol9k1.db'),
-        IGDB_API_KEY=os.environ.get('IGDB_API_KEY'),
-        MAX_INVITE_TOKENS=3,
-    )
-    secret = os.environ.get('SECRET_KEY', default=os.urandom(24))
-    app.config["SECRET_KEY"] = secret
-
-    if os.environ.get('DEBUGGING', default="False").capitalize() == 'True':
-        app.config['SECRET_KEY'] = 'wat'
-
-    if test_config is None:
-        # load the instance config, if it exists, when not testing
-        app.config.from_pyfile('config.py', silent=True)
-    else:
-        # load the test config if passed in
-        app.config.from_mapping(test_config)
-
-    app.config.from_envvar('LOL9K1_SETTINGS', silent=True)
+    configure(app, test_config)
 
     Markdown(app)
 
@@ -64,3 +46,28 @@ def create_app(test_config=None):
     app.register_blueprint(tournament.bp)
 
     return app
+
+
+def configure(app, test_config):
+    db_path = os.environ.get(
+        'LOL9K1_DB_PATH',
+        os.path.join(app.root_path, 'lol9k1.db')
+    )
+    if bool(os.environ.get('FLASK_DEBUG', default=False)):
+        secret = 'debugging'
+    else:
+        secret = os.environ.get('LOL9K1_SECRET_KEY', default=os.urandom(24))
+    app.config.from_mapping(
+        DATABASE=db_path,
+        IGDB_API_KEY=os.environ.get('LOL9K1_IGDB_API_KEY', default=None),
+        MAX_INVITE_TOKENS=3,
+        SECRET_KEY=secret
+    )
+    if test_config is None:
+        # load the instance config, if it exists, when not testing
+        app.config.from_pyfile('config.py', silent=True)
+    else:
+        # load the test config if passed in
+        app.config.from_mapping(test_config)
+        app.config.from_prefixed_env()
+    app.config.from_envvar('LOL9K1_SETTINGS', silent=True)

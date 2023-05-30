@@ -1,7 +1,6 @@
 pragma foreign_keys = on;
 
 -- GAMES
-drop table if exists games;
 create table games (
   id          integer primary key autoincrement,
   name        text    not null unique,
@@ -19,7 +18,6 @@ create unique index games_id_uindex
   on games (id);
 
 -- USERS
-drop table if exists users;
 create table users (
   id         integer primary key autoincrement,
   name       text not null unique,
@@ -34,8 +32,8 @@ create unique index users_id_uindex
   on users (id);
 create unique index users_token_used_uindex
   on users (token_used);
+
 -- VOTES
-drop table if exists votes;
 create table votes
 (
   user integer not null,
@@ -48,7 +46,6 @@ create table votes
 );
 
 -- INVITES
-drop table if exists invites;
 create table invites
 (
   token    text primary key not null,
@@ -60,7 +57,6 @@ create unique index invites_token_uindex
   on invites (token);
 
 -- TOURNAMENTS
-drop table if exists events;
 create table events
 (
   id                integer primary key autoincrement not null,
@@ -83,7 +79,6 @@ create unique index events_id_uindex
   on events (id);
 
 -- TEAMS
-drop table if exists teams;
 create table teams
 (
   id      integer primary key autoincrement not null,
@@ -94,7 +89,6 @@ create unique index teams_id_uindex
   on teams (id);
 
 -- TOURNAMENT PARTICIPANTS
-drop table if exists tournament_participants;
 create table tournament_participants
 (
   user            int not null,
@@ -107,7 +101,6 @@ create table tournament_participants
 );
 
 -- CONFIG
-drop table if exists config;
 create table config
 (
   key   text not null primary key,

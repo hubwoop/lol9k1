@@ -1,10 +1,9 @@
 # LOL9k1 (Lan party organizer LOL > 9000)
-[![BCH compliance](https://bettercodehub.com/edge/badge/hubwoop/lol9k1?branch=master)](https://bettercodehub.com/)
 
 Organize your lan party!
 
 ## Recommended Setup
-### On macOS and Linux: 
+### On macOS and Linux 
 - `python3 -m venv lol9k1env`
 - `source lol9k1env/bin/activate`
 - `pip install -r lol9k1/requirements.txt`
@@ -12,7 +11,8 @@ Organize your lan party!
 - `flask init-db`
 - Generate an admin token for registration: `flask create-admin`
 - Start lol9k1: `flask run`
-### On Windows: 
+
+### On Windows
 - `py -m venv lol9k1env`
 - `.\lol9k1env\Scripts\activate`
 - `pip install -r lol9k1\requirements.txt`
@@ -42,4 +42,4 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## Acknowledgments
 
-* Thank you [Markus](https://github.com/markusschuettler)
+* Thank you, [Markus](https://github.com/markusschuettler)
