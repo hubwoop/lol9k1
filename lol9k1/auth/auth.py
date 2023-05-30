@@ -44,7 +44,7 @@ def login() -> Union[Response, str]:
         if user and check_password_hash(user.password, request.form['password']):
             initialize_session_for(user)
             flash("You've logged in successfully. Congratulations!", STYLE.message)
-            if session["redirect_target_after_login"]:
+            if "redirect_target_after_login" in session and session["redirect_target_after_login"]:
                 return redirect(session["redirect_target_after_login"])
             return redirect(url_for('landing.landing'))
         else:
