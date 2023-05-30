@@ -12,11 +12,11 @@ Organize your lan party!
 - Generate an admin token for registration: `flask create-admin`
 - Start lol9k1: `flask run`
 
-### On Windows
+### On Windows (pwsh)
 - `py -m venv lol9k1env`
 - `.\lol9k1env\Scripts\activate`
 - `pip install -r lol9k1\requirements.txt`
-- `set FLASK_APP=lol9k1`
+- `$env:FLASK_APP="lol9k1"`
 - `flask init-db`
 - Generate an admin token for registration: `flask create-admin`
 - Start lol9k1: `flask run`

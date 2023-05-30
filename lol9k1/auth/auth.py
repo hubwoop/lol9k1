@@ -18,7 +18,8 @@ def login_required(view):
     @functools.wraps(view)
     def wrapped_view(*args, **kwargs):
         if g.user is None:
-            return redirect(url_for('landing.landing', next=request.url))
+            session["redirect_target_after_login"] = request.url
+            return redirect(url_for('landing.landing'))
         return view(*args, **kwargs)
     return wrapped_view
 
@@ -43,8 +44,8 @@ def login() -> Union[Response, str]:
         if user and check_password_hash(user.password, request.form['password']):
             initialize_session_for(user)
             flash("You've logged in successfully. Congratulations!", STYLE.message)
-            if request.form['redirect_to']:
-                return redirect(request.form['redirect_to'])
+            if session["redirect_target_after_login"]:
+                return redirect(session["redirect_target_after_login"])
             return redirect(url_for('landing.landing'))
         else:
             flash('Invalid username and/or password.', STYLE.error)

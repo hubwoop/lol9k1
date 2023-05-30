@@ -11,6 +11,7 @@ INVALID_DATES = '<a href="https://www.youtube.com/watch?v=HGpr4r9X8DE">Ehh... No
 
 
 @bp.route('/admin', methods=['GET', 'POST'])
+@auth.login_required
 @auth.admin_required
 def administration() -> str:
     handle_form_posts()
