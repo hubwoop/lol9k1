@@ -1,4 +1,4 @@
-FROM tiangolo/uwsgi-nginx-flask:python3.9
+FROM tiangolo/uwsgi-nginx-flask:python3.11
 
 LABEL org.opencontainers.image.description="Organize your LAN party"
 
