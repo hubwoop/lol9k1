@@ -1,7 +1,7 @@
 import json
 import random
 from collections import namedtuple
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 import dateutil.parser
@@ -331,13 +331,14 @@ def decide_which_date_to_fetch(end, start) -> datetime:
 
 
 def get_surrounding_dates_if_possible(end, fetch_date, start) -> (datetime, datetime):
-    next_day = None
-    previous_day = None
-    if fetch_date.day + 1 <= end.day:
-        next_day = datetime(fetch_date.year, fetch_date.month, fetch_date.day + 1).isoformat()
-    if fetch_date.day - 1 >= start.day:
-        previous_day = datetime(fetch_date.year, fetch_date.month, fetch_date.day - 1).isoformat()
-    return next_day, previous_day
+    next_party_day, previous_party_day = None, None
+    previous_day = (fetch_date - timedelta(days=1)).date()
+    next_day = (fetch_date + timedelta(days=1)).date()
+    if next_day <= end.date():
+        next_party_day = next_day.isoformat()
+    if previous_day >= start.date():
+        previous_party_day = previous_day.isoformat()
+    return next_party_day, previous_party_day
 
 
 def format_events(fetch_date, events) -> List[dict]:
