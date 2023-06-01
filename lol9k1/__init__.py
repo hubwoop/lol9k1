@@ -61,7 +61,9 @@ def configure(app, test_config):
         DATABASE=db_path,
         IGDB_API_KEY=os.environ.get('LOL9K1_IGDB_API_KEY', default=None),
         MAX_INVITE_TOKENS=3,
-        SECRET_KEY=secret
+        SECRET_KEY=secret,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE='Strict',
     )
     if test_config is None:
         # load the instance config, if it exists, when not testing
