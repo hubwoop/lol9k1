@@ -30,7 +30,7 @@ def create_app(test_config=None):
     from . import landing
     app.register_blueprint(landing.bp)
 
-    from . import schedule
+    from .schedule import schedule
     app.register_blueprint(schedule.bp)
 
     from . import admin
@@ -41,9 +41,6 @@ def create_app(test_config=None):
 
     from . import events
     app.register_blueprint(events.bp)
-
-    from . import tournament
-    app.register_blueprint(tournament.bp)
 
     return app
 

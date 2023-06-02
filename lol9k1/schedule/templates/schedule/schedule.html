@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+{% block title %}Schedule{% endblock %}
+{% block head %}
+  {{ super() }}
+   <link rel="stylesheet" href="{{ url_for('static', filename='css/calendar/toastui-calendar-2.1.3.css') }}" />
+   <link rel="stylesheet" href="{{ url_for('static', filename='css/calendar/tui-time-picker.min.css') }}" />
+   <link rel="stylesheet" href="{{ url_for('static', filename='css/calendar/tui-date-picker.min.css') }}" />
+    <!-- ToastUI (tui) scripts depend on each other, order matters -->
+   <script src="{{ url_for('static', filename='js/calendar/tui-time-picker.min.js') }}" defer></script>
+   <script src="{{ url_for('static', filename='js/calendar/tui-date-picker.min.js') }}" defer></script>
+   <script src="{{ url_for('static', filename='js/calendar/toastui-calendar-2.1.3.js') }}" defer></script>
+  {% include 'schedule/script.html' %}
+{% endblock %}
+{% block body %}
+
+  <h2>Schedule</h2>
+  <button class="btn btn-primary" style="font-size: 1.2em" onclick="window.tourneySchedule.prev()">👈</button>
+  <button class="btn btn-primary" style="font-size: 1.2em" onclick="window.tourneySchedule.today()">🔄️ Today</button>
+  <button class="btn btn-primary" style="font-size: 1.2em" onclick="window.tourneySchedule.next()">👉</button>
+  <button class="btn btn-primary" style="font-size: 1.2em" onclick="toggleView()">📆 Toggle View</button>
+        <br><br>
+    <div id="calendar" style="height: 800px"></div>
+    {% include 'schedule/event_creation_form.html' %}
+{% endblock %}

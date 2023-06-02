@@ -42,6 +42,6 @@
   {% else %}
     <p>No Tournament scheduled for {{ game_row.name }} ({{ game_row.id }})!</p>
   {% endfor %}
-  <a href="{{ url_for('tournament.create_tournament', game=game_row.slug) }}" class="btn btn-primary">Create a tournament!</a>
+  <a href="{{ url_for('schedule.schedule', _anchor='eventCreationForm', selected=game_row.slug) }}" class="btn btn-primary">Create a tournament!</a>
 
 {% endblock %}

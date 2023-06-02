@@ -1,0 +1,42 @@
+{% if games|length > 0 %}
+<h2 id="eventCreationForm">Event Creation</h2>
+<form method=post action="{{ url_for('event.create_event') }}">
+<div class="row">
+    <div class="col">
+        <label for="game">Game</label>
+        <select name="game" id="game" class="form-control">
+        {% for game in games %}
+          <option value="{{ game.id }}" {% if request.args.get('selected') == game.slug %} selected {% endif %}>
+              {{ game.name }}
+          </option>
+        {% endfor %}
+        </select>
+    </div>
+</div>
+<div class="row">
+  <div class="col">
+    <label for="start">Start</label>
+    <input type="datetime-local" min="{{ party_start }}" max="{{ party_end }}" required name="start"
+           class="form-control" id="start">
+  </div>
+  <div class="col">
+    <label for="end">End</label>
+    <input type="datetime-local" min="{{ party_start }}" max="{{ party_end }}" required name="end"
+           class="form-control" id="end">
+  </div>
+  <div class="col">
+    <label for="mode">Mode</label>
+    <select name="mode" id="mode" class="form-control">
+      <option value="1">Single Elimination</option>
+      <option value="2">Double Elimination</option>
+    </select>
+  </div>
+</div>
+<div class="row justify-content-end">
+  <div class="col-auto">
+    <input type="hidden" name="redirect" value="{{ fetched_date }}">
+    <button type="submit" class="btn btn-primary">Create!</button>
+  </div>
+</div>
+</form>
+{% endif %}

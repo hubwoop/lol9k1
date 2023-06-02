@@ -2,10 +2,10 @@ import json
 import random
 from collections import namedtuple
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, NamedTuple, Tuple
 
 import dateutil.parser
-from flask import session, Blueprint, request, redirect, url_for, flash, render_template, Response
+from flask import session, Blueprint, request, redirect, url_for, flash, render_template, Response, abort
 
 import lol9k1.utilities as utilities
 from lol9k1.auth import auth
@@ -13,14 +13,35 @@ from lol9k1.database import get_db, get_party_start_date, get_party_end_date
 from lol9k1.utilities import STYLE
 
 Schedule = namedtuple('prepared_schedule',
-                      ['fetch_date', 'formatted_events', 'next_day', 'previous_day', 'event_creators'])
+                      ['fetch_date', 'formatted_events', 'event_creators'])
 Team = namedtuple('team', ['name', 'captain', 'players', 'team_id'])
-Participants = namedtuple('participants', ['user', 'team_name', 'team_id', 'captain'])
+Participant = namedtuple('participant', ['user', 'team_name', 'team_id', 'captain'])
 Details = namedtuple('details',
                      ['creator', 'creator_id', 'game_id', 'game', 'game_slug', 'tournament_mode', 'state',
                       'description', 'external_url'])
 Captain = namedtuple('captain', ['name', 'id', 'team', 'team_id'])
 PickDetails = namedtuple('PickDetails', ['pick_order', 'currently_picking'])
+
+
+class Event(NamedTuple):
+    id: int
+    game: int
+    start_datetime: datetime
+    end_datetime: datetime
+    created_by: int
+    mode: str
+    state: Optional[str]
+    description: Optional[str]
+    external_url: Optional[str]
+    pick_order: Optional[str]
+    currently_picking: Optional[int]
+    skips: int = 0
+
+
+class EventCreationResult(NamedTuple):
+    response: Tuple[str, str]
+    event: Optional[Event]
+
 
 bp = Blueprint('event', __name__, url_prefix='/event')
 
@@ -277,35 +298,58 @@ def prepare_schedule(fetch_date=None) -> Optional[Schedule]:
     if not start or not end:
         return None
     if not fetch_date:
-        fetch_date = decide_which_date_to_fetch(end, start)
-    events = get_all_by_date(fetch_date)
+        events = get_all()
+    else:
+        events = get_all_by_date(fetch_date)
     event_creators = distinct_creators_as_string(events)
     formatted_events = format_events(fetch_date, events)
-    next_day, previous_day = get_surrounding_dates_if_possible(end, fetch_date, start)
-    return Schedule(fetch_date, formatted_events, next_day, previous_day, event_creators)
+    return Schedule(fetch_date, formatted_events, event_creators)
 
 
-def handle_event_post(game_id) -> (str, STYLE):
+@bp.route('/create', methods=['POST'])
+@auth.login_required
+def create_event() -> Response:
+    game_id = None
+    try:
+        game_id = int(request.form['game'])
+    except (ValueError, AttributeError):
+        pass
+    if not game_id:
+        flash(utilities.NAVY_SEAL, STYLE.warning)
+        return redirect(url_for('landing.landing'))
+    db = get_db()
+    games_row = db.execute('select * from games where id = ?', [game_id]).fetchone()
+    if not games_row:
+        abort(404)
+    result = handle_event_post(games_row[0])
+    if result.response:
+        flash(*result.response)
+    return redirect(url_for('event.event', event_id=result.event.id))
+
+
+def handle_event_post(game_id) -> EventCreationResult:
     if request.args.get('fetch_date', None):
-        return utilities.NAVY_SEAL, STYLE.warning
+        return EventCreationResult((utilities.NAVY_SEAL, STYLE.warning), None)
     try:
         start = dateutil.parser.parse(request.form['start'])
         end = dateutil.parser.parse(request.form['end'])
         mode = int(request.form['mode'])
     except (KeyError, ValueError, OverflowError):
-        return utilities.NAVY_SEAL, STYLE.warning
+        return EventCreationResult((utilities.NAVY_SEAL, STYLE.warning), None)
 
     party_end = dateutil.parser.parse(get_party_end_date())
     party_start = dateutil.parser.parse(get_party_start_date())
     if start < party_start or start >= party_end or end > party_end or end <= party_start or start >= end:
-        return utilities.NAVY_SEAL, STYLE.warning
+        return EventCreationResult(('Event not in party boundaries', STYLE.warning), None)
     db = get_db()
-    db.execute('''
+    cursor = db.cursor()
+    cursor.execute('''
         insert into events (game, start_datetime, end_datetime, created_by, mode)
         values (?, ?, ?, ?, ?)
       ''', (game_id, request.form['start'], request.form['end'], session.get('user_id'), mode))
+    event_row = cursor.execute('''select * from events where id=?''', [cursor.lastrowid]).fetchone()
     db.commit()
-    return "Tournament erstellt!", STYLE.success
+    return EventCreationResult(("Tournament erstellt!", STYLE.success), Event(*event_row))
 
 
 def get_party_start_and_end() -> (Optional[datetime], Optional[datetime]):
@@ -316,18 +360,6 @@ def get_party_start_and_end() -> (Optional[datetime], Optional[datetime]):
     start = dateutil.parser.parse(get_party_start_date())
     end = dateutil.parser.parse(get_party_end_date())
     return end, start
-
-
-def decide_which_date_to_fetch(end, start) -> datetime:
-    current_date = datetime.now()
-    fetch_date = request.args.get('fetch_date', None)
-    if request.args.get('fetch_date', None):
-        fetch_date = dateutil.parser.parse(fetch_date)
-    elif start <= current_date <= end:
-        fetch_date = current_date
-    else:
-        fetch_date = dateutil.parser.parse(get_party_start_date())
-    return fetch_date
 
 
 def get_surrounding_dates_if_possible(end, fetch_date, start) -> (datetime, datetime):
@@ -344,34 +376,17 @@ def get_surrounding_dates_if_possible(end, fetch_date, start) -> (datetime, date
 def format_events(fetch_date, events) -> List[dict]:
     formatted_events = []
     for row in events:
-        start = define_start(fetch_date, row)
-        end = define_end(fetch_date, row)
+        event_id = row[0]
         formatted_events.append({
-            'id': row[0],
+            'id': event_id,
             'game': row[1],
-            'start': start,
-            'end': end,
+            'start': row[2],
+            'end': row[3],
             'created_by': row[4],
             'mode': utilities.MODE_INT_TO_STRING[int(row[5])],
-            'state': row[6]
+            'state': row[6],
         })
     return formatted_events
-
-
-def define_end(fetch_date, row):
-    if dateutil.parser.parse(row[3]).day != fetch_date.day:
-        end = datetime(fetch_date.year, fetch_date.month, fetch_date.day, 23, 00).isoformat()
-    else:
-        end = row[3]
-    return end
-
-
-def define_start(fetch_date, row):
-    if dateutil.parser.parse(row[2]).day != fetch_date.day:
-        start = datetime(fetch_date.year, fetch_date.month, fetch_date.day, 0, 0).isoformat()
-    else:
-        start = row[2]
-    return start
 
 
 def get_all_by_date(fetch_date: datetime) -> List[tuple]:
@@ -385,6 +400,16 @@ def get_all_by_date(fetch_date: datetime) -> List[tuple]:
         or (date(start_datetime) < date(?) and date(end_datetime) > date(?))
       ''', (fetch_date, fetch_date, fetch_date, fetch_date)).fetchall()
     return tournaments
+
+
+def get_all() -> List[tuple]:
+    events = get_db().execute('''
+      select t.id, games.name, t.start_datetime, t.end_datetime, users.name, t.mode, t.state 
+      from events t 
+        join games on t.game = games.id 
+        join users on t.created_by = users.id
+      ''').fetchall()
+    return events
 
 
 def distinct_creators_as_string(events: List[tuple]) -> str:
@@ -411,7 +436,7 @@ def build_teams(participants_rows):
     if participants_rows:
         teams = {}
         for row in participants_rows:
-            player = Participants(row[0], row[1], row[2], row[3])
+            player = Participant(row[0], row[1], row[2], row[3])
             if player.team_id in teams:
                 # add to existing team
                 teams[player.team_id].players.append(player.user)

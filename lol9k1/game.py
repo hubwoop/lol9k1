@@ -14,3 +14,8 @@ def game_detail(game) -> str:
     game_row = db.execute('select * from games where slug = ?', [game]).fetchone()
     games_events = events.get_all_by_game(game_row[0])
     return render_template('game.html', game_row=game_row, page_title=game_row[1], events=games_events)
+
+
+def get_all():
+    db = get_db()
+    return db.execute('select * from games').fetchall()

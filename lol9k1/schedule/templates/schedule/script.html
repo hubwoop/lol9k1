@@ -1,0 +1,129 @@
+<script>
+function createTheme() {
+    function getCssVar(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(`--${name}`);
+    }
+
+    const commonTheme = {
+        backgroundColor: getCssVar('dark'),
+        holiday: {color: getCssVar('light')},
+        saturday: {color: getCssVar('light')},
+        dayName: {color: getCssVar('light')},
+        today: {color: getCssVar('cyan')},
+    }
+    const weekTheme = {
+        futureTime: {color: getComputedStyle(document.documentElement).getPropertyValue('--white')},
+        dayName: {
+            borderLeft: 'none',
+            borderTop: 'none',
+            borderBottom: 'none',
+        }
+    }
+    return {
+        common: commonTheme,
+        week: weekTheme,
+    };
+}
+
+function registerEventListeners(calendar) {
+    calendar.on('beforeUpdateEvent', (eventObj) => {
+        console.log('beforeUpdateEvent', eventObj);
+    });
+
+    calendar.on('beforeCreateEvent', (eventObj) => {
+        console.log('beforeCreateEvent', eventObj);
+    });
+
+    calendar.on('selectDateTime', (eventObj) => {
+        const startLocalDatetimePicker = document.getElementById('start');
+        const endLocalDatetimePicker = document.getElementById('end');
+        if(startLocalDatetimePicker === null || endLocalDatetimePicker === null) {
+            console.info('start or end datetime picker not found');
+            return;
+        }
+        eventObj.start.setMinutes(eventObj.start.getMinutes() - eventObj.start.getTimezoneOffset());
+        eventObj.end.setMinutes(eventObj.end.getMinutes() - eventObj.end.getTimezoneOffset());
+        startLocalDatetimePicker.value = eventObj.start.toISOString().slice(0, 16);
+        endLocalDatetimePicker.value = eventObj.end.toISOString().slice(0, 16);
+    });
+
+    calendar.on('clickEvent', (eventObj) => {
+        if (eventObj.event.raw !== null && eventObj.event.raw.clickable === false) {
+            return;
+        }
+        window.location.href = `/event/${eventObj.event.id}`;
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+
+    const Calendar = tui.Calendar;
+
+    // https://github.com/nhn/tui.calendar/blob/main/docs/en/apis/theme.md#common-theme
+    let calendar = new Calendar('#calendar', {
+        usageStatistics: false,
+        defaultView: 'week',
+        useDetailPopup: false,
+        useFormPopup: false,
+        theme: createTheme(),
+        week: {
+            startDayOfWeek: 1,
+            taskView: false,
+        },
+    });
+
+    registerEventListeners(calendar);
+
+    window.tourneySchedule = calendar;
+
+    {% for event in tournaments %}
+    console.log(JSON.parse('{{ event|tojson }}'));
+    {% endfor %}
+
+    calendar.createEvents([
+        {
+            id: '9001',
+            title: 'Best LAN Ever',
+            body: `powered by lol9k1`,
+            start: '{{ party_start|safe }}',
+            end: '{{ party_end|safe }}',
+            category: 'allday',
+            state: 'Free',
+            isReadOnly: true,
+            color: '#ffffff',
+            backgroundColor: '#0a0a0a',
+            customStyle: {
+                fontStyle: 'bold',
+            },
+            raw: {
+              clickable: false,
+            },
+        },
+    {% for event in tournaments %}
+        {
+            id: '{{ event['id']|safe }}',
+            title: '{{ event['game']|safe }} Tournament',
+            body: '<a href="{{ url_for('event.event', event_id=event['id']) }}">{{ event['game']|tojson|safe }}</a>',
+            start: '{{ event['start']|safe }}',
+            end: '{{ event['end']|safe }}',
+            attendees: ['A', 'B', 'C'],
+            category: 'time',
+            state: 'Free',
+            isReadOnly: true,
+            color: '#ffffff',
+            backgroundColor: '#525252',
+        },
+    {% endfor %}
+    ]);
+});
+
+function toggleView() {
+    const calendar = window.tourneySchedule;
+    if (calendar.getViewName() === 'day') {
+        calendar.changeView('week');
+    } else {
+        calendar.changeView('day');
+    }
+}
+
+</script>

@@ -45,7 +45,9 @@ def login() -> Union[Response, str]:
             initialize_session_for(user)
             flash("You've logged in successfully. Congratulations!", STYLE.message)
             if "redirect_target_after_login" in session and session["redirect_target_after_login"]:
-                return redirect(session["redirect_target_after_login"])
+                redirect_to = session["redirect_target_after_login"]
+                session.pop("redirect_target_after_login", None)
+                return redirect(redirect_to)
             return redirect(url_for('landing.landing'))
         else:
             flash('Invalid username and/or password.', STYLE.error)
@@ -58,7 +60,10 @@ def get_user_by_name(name) -> Optional[User]:
     except sqlite3.Error:
         flash(utilities.NAVY_SEAL, STYLE.warning)
         return None
-    return User(*cursor.fetchone())
+    result = cursor.fetchone()
+    if result is None:
+        return None
+    return User(*result)
 
 
 def initialize_session_for(user):
@@ -70,12 +75,12 @@ def initialize_session_for(user):
 
 
 @bp.route('/logout')
-@login_required
 def logout() -> Response:
     session.pop('logged_in', None)
     session.pop('user_id', None)
     session.pop('is_admin', None)
     session.pop('username', None)
+    session.pop('redirect_target_after_login', None)
     flash("You've logged out.", STYLE.message)
     return redirect(url_for('landing.landing'))
 
