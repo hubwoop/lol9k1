@@ -58,7 +58,7 @@ def get_user_by_name(name) -> Optional[User]:
     try:
         cursor = database.get_db().execute('select * from users where name = (?)', [name])
     except sqlite3.Error:
-        flash(utilities.NAVY_SEAL, STYLE.warning)
+        flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return None
     result = cursor.fetchone()
     if result is None:

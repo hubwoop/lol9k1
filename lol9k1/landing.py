@@ -82,7 +82,7 @@ def game_vote(game, vote) -> Response:
     game = int(game)
     db = get_db()
     if abs(vote) != 1 or not db.execute('select id from games where id = ?', [game]).fetchone():
-        flash(utilities.NAVY_SEAL, STYLE.warning)
+        flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return redirect(url_for('landing.landing'))
     user = session.get('user_id')
     cursor = db.execute('select vote from votes where user = ? and game = ?', [user, game])

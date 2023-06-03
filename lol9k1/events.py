@@ -180,7 +180,7 @@ def add_teammate_api(event_id, team_id):
             or team_id != currently_picking_team \
             or event_state != 'pickphase' \
             or requested_user not in possible_users:
-        return json.dumps(utilities.NAVY_SEAL)
+        return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
     # add requested user to requesting team
     db.execute('''insert into tournament_participants (user, tournament, team) values (?, ? ,?)''',
                (int(request.json), event_id, team_id))
@@ -206,7 +206,7 @@ def skip_picking_teammate_api(event_id, team_id):
     currently_picking_team = get_currently_picking(event_id)
     event_state = get_state(event_id)
     if not user_allowed_to_skip(event_id, currently_picking_team, team_id, event_state):
-        return json.dumps(utilities.NAVY_SEAL)
+        return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
     pick_order = get_pick_order(event_id)
     skips = increase_skips_for(event_id)
     if skips >= len(pick_order):
@@ -230,12 +230,12 @@ def set_team_name_api(team_id):
     try:
         captain = get_captain(team_id)
     except KeyError:
-        return json.dumps(utilities.NAVY_SEAL)
+        return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
     if not auth.current_user_is_admin() and int(session.get('user_id')) != int(captain):
-        return json.dumps(utilities.NAVY_SEAL)
+        return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
     new_name = request.json
     if not type(new_name) == str:
-        return json.dumps(utilities.NAVY_SEAL)
+        return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
     set_team_name(team_id, new_name)
     return json.dumps("yep :)!")
 
@@ -265,7 +265,7 @@ def event_captains_api(event_id):
     elif request.method == 'DELETE':
         return delete_captains(request.json(), event_id)
     else:
-        return utilities.NAVY_SEAL
+        return utilities.DFAULT_REFUSAL_MESSAGE
 
 
 @bp.route('/<int:event_id>/participants', methods=['GET', 'UPDATE'])
@@ -278,7 +278,7 @@ def event_participants_api(event_id):
         participants = update_participants(request.json())
         return json.dumps(participants)
     else:
-        return utilities.NAVY_SEAL
+        return utilities.DFAULT_REFUSAL_MESSAGE
 
 
 @bp.route('/delete/<int:event_id>')
@@ -289,7 +289,7 @@ def delete_event(event_id) -> Response:
         flash(f"Deleted event {event_id}.", STYLE.message)
         return redirect(url_for('game.game_detail', game=game))
     else:
-        flash(utilities.NAVY_SEAL, STYLE.warning)
+        flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return redirect(url_for('landing.landing'))
 
 
@@ -315,7 +315,7 @@ def create_event() -> Response:
     except (ValueError, AttributeError):
         pass
     if not game_id:
-        flash(utilities.NAVY_SEAL, STYLE.warning)
+        flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return redirect(url_for('landing.landing'))
     db = get_db()
     games_row = db.execute('select * from games where id = ?', [game_id]).fetchone()
@@ -329,13 +329,13 @@ def create_event() -> Response:
 
 def handle_event_post(game_id) -> EventCreationResult:
     if request.args.get('fetch_date', None):
-        return EventCreationResult((utilities.NAVY_SEAL, STYLE.warning), None)
+        return EventCreationResult((utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning), None)
     try:
         start = dateutil.parser.parse(request.form['start'])
         end = dateutil.parser.parse(request.form['end'])
         mode = int(request.form['mode'])
     except (KeyError, ValueError, OverflowError):
-        return EventCreationResult((utilities.NAVY_SEAL, STYLE.warning), None)
+        return EventCreationResult((utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning), None)
 
     party_end = dateutil.parser.parse(get_party_end_date())
     party_start = dateutil.parser.parse(get_party_start_date())
@@ -539,7 +539,7 @@ def delete_captains(captains: str, tournament: int):
               delete from tournament_participants where tournament = ? and user = ? and is_team_captain = 1
             ''', (tournament, captain))
     else:
-        return utilities.NAVY_SEAL
+        return utilities.DFAULT_REFUSAL_MESSAGE
 
 
 def valid_captains_json(captains: str) -> bool:

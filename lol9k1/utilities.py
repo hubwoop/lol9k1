@@ -2,7 +2,7 @@ import random
 import uuid
 from collections import namedtuple
 
-NAVY_SEAL = "no."
+DFAULT_REFUSAL_MESSAGE = "no."
 MODE_INT_TO_STRING = {
     1: 'Single Elimination',
     2: 'Double Elimination'

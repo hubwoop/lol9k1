@@ -68,7 +68,13 @@ def get_party_end_date() -> str:
 @click.command('init-db')
 @with_appcontext
 def init_db_command() -> None:
-    """Apply the db schema to a (new) sqlite DB @ LOL9K1_DB_PATH."""
+    """
+    Initializes the SQLite database.
+
+    Will create a new database if one does not exist.
+    The path to the database can be specified via current_app.config['DATABASE']
+    or the LOL9K1_DB_PATH environment variable.
+    """
     init_db()
     click.echo('Initialized the database.')
 
@@ -105,7 +111,7 @@ def create_dummy_users(number: int, password: str) -> None:
 
 @click.command('add-missing-slugs')
 @with_appcontext
-def add_slugs_if_missing() -> str:
+def add_slugs_if_missing() -> None:
     db = get_db()
     cursor = db.execute('select id, name, slug from games')
     game_names = cursor.fetchall()
@@ -113,12 +119,12 @@ def add_slugs_if_missing() -> str:
         if not game_name[2]:
             db.execute('update games set slug = ? where id = ?', [slugify(game_name[1]), game_name[0]])
     db.commit()
-    return "done :)"
+    click.echo("done :)")
 
 
 @click.command('update-igdb-ids')
 @with_appcontext
-def add_igdb_ids_if_missing() -> str:
+def add_igdb_ids_if_missing() -> None:
     igdb_connection = get_igdb()
     db = get_db()
     cursor = db.execute('select id, name, igdb_id from games')
@@ -134,7 +140,7 @@ def add_igdb_ids_if_missing() -> str:
             if igdb_id:
                 db.execute('update games set igdb_id = ? where id = ?', [int(igdb_id), game_name[0]])
     db.commit()
-    return "done :)"
+    click.echo("done :)")
 
 
 def get_igdb() -> igdb:
