@@ -1,4 +1,5 @@
 import json
+import random
 import sqlite3
 import uuid
 from typing import Optional
@@ -8,7 +9,10 @@ from flask import current_app, g
 from flask.cli import with_appcontext
 from slugify import slugify
 from igdb_api_python.igdb import igdb
+from werkzeug.security import generate_password_hash
+
 from lol9k1.auth.types import Token
+from lol9k1.utilities import generate_name, generate_token
 
 
 def get_db():
@@ -40,6 +44,7 @@ def init_app(app):
     app.teardown_appcontext(close_db)
     app.cli.add_command(init_db_command)
     app.cli.add_command(create_admin_command)
+    app.cli.add_command(create_dummy_users)
 
 
 def get_party_start_date() -> str:
@@ -63,19 +68,39 @@ def get_party_end_date() -> str:
 @click.command('init-db')
 @with_appcontext
 def init_db_command() -> None:
-    """Clear the existing data and create new tables."""
+    """Apply the db schema to a (new) sqlite DB @ LOL9K1_DB_PATH."""
     init_db()
     click.echo('Initialized the database.')
 
 
-@click.command('create-admin')
+@click.command('create-admin-token')
 @with_appcontext
 def create_admin_command() -> None:
-    db = get_db()
-    token = uuid.uuid4().hex[:12]
-    db.execute('insert into invites (token, added_by) values (?, ?)', [token, 0])
-    db.commit()
+    """Create an admin user."""
+    token = generate_token()
+    add_token(added_by=0, admin=True, token=token)
     click.echo(f'Your invite token is:\n{token}')
+
+
+@click.command('create-dummy-users')
+@click.option('-n', '--number', default=9, type=int)
+@click.option('-p', '--password', default='password', type=str)
+@with_appcontext
+def create_dummy_users(number: int, password: str) -> None:
+    """Create dummy users."""
+    while number > 0:
+        token = generate_token()
+        name = generate_name()
+        try:
+            add_token(token=token, added_by=0, admin=False)
+            add_user(
+                name=name, password=password, email=f'{uuid.uuid4()}@example.com',
+                gender=random.choice((0, 1, 2)), token=token, is_admin=False)
+            click.echo(f"Created '{name}' with token '{token}'")
+        except sqlite3.IntegrityError:
+            click.echo(f"Failed to create '{name}' with token '{token}'", err=True)
+        number -= 1
+    click.echo(click.style(f"Done creating users. All passwords are set to '{password}'", fg='green'))
 
 
 @click.command('add-missing-slugs')
@@ -137,3 +162,19 @@ def get_unused_token(provided_token) -> Optional[Token]:
         return Token(*cursor.fetchone())
     except TypeError:
         return None
+
+
+def add_user(name: str, password: str, email: str, gender: str, token: str, is_admin: bool) -> None:
+    db = get_db()
+    db.execute('insert into users (name, password, email, gender, is_admin, token_used) '
+               'values (?, ?, ?, ?, ?, ?)',
+               [name, generate_password_hash(password), email, gender, is_admin, token])
+    db.execute('update invites set used = 1 where token = ?', [token])
+    db.commit()
+
+
+def add_token(token: str, added_by: int, admin: bool) -> None:
+    db = get_db()
+    db.execute('insert into invites (token, used, added_by, admin) values (?, ?, ?, ?)',
+               [token, 0, added_by, admin])
+    db.commit()

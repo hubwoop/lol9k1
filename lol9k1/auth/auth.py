@@ -3,12 +3,12 @@ import sqlite3
 from typing import Optional, Union
 
 from flask import (Blueprint, flash, g, redirect, render_template, request, session, url_for, abort, Response)
-from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.security import check_password_hash
 
 import lol9k1.database as database
 from lol9k1 import utilities
 from lol9k1.auth.forms import RegistrationForm
-from lol9k1.auth.types import User, RegistrationError
+from lol9k1.auth.types import User
 from lol9k1.utilities import STYLE
 
 bp = Blueprint('auth', __name__, url_prefix='/auth', template_folder='templates')
@@ -104,33 +104,12 @@ def register() -> Union[Response, str]:
     form = RegistrationForm()
     if form.validate_on_submit():
         try:
-            add_user(form)
+            database.add_user(name=form.name.data, password=form.password.data, email=form.email.data,
+                              gender=form.gender.data, token=form.token.data.token, is_admin=form.token.data.admin)
             flash("Your registration was successful, you may now login.", STYLE.message)
             return redirect(url_for('landing.landing'))
-        except RegistrationError as registration_error:
-            flash(str(registration_error), STYLE.error)
+        except sqlite3.IntegrityError:
+            flash("Registration failed.", STYLE.error)
     return render_template('auth/register.html',
                            form=form,
                            token=request.args['token'] if 'token' in request.args else None)
-
-
-def add_user(form: RegistrationForm) -> None:
-    is_admin = is_admin_token(form.token.data)
-    db = database.get_db()
-    try:
-        # add user
-        db.execute('insert into users (name, password, email, gender, is_admin, token_used) '
-                   'values (?, ?, ?, ?, ?, ?)',
-                   [request.form['name'], generate_password_hash(request.form['password']),
-                    request.form['email'], request.form['gender'], is_admin, request.form['token']])
-    except sqlite3.IntegrityError:
-        raise RegistrationError("Registration failed.")
-
-    db.execute('update invites set used = 1 where token = ?', [request.form['token']])
-    db.commit()
-
-
-def is_admin_token(token):
-    # checks if the user was invited via the create_admin_command
-    is_admin = 1 if token.added_by == 0 else 0
-    return is_admin

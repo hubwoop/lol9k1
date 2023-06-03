@@ -48,9 +48,10 @@ create table votes
 -- INVITES
 create table invites
 (
-  token    text primary key not null,
+  token    text primary key  not null,
   used     integer default 0 not null,
-  added_by integer          not null,
+  added_by integer           not null,
+  admin    integer default 0 not null,
   constraint invites_users_id_fk foreign key (added_by) references users (id)
 );
 create unique index invites_token_uindex

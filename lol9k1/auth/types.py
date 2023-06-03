@@ -5,6 +5,7 @@ class Token(NamedTuple):
     token: str
     used: bool
     added_by: int
+    admin: bool
 
 
 class User(NamedTuple):

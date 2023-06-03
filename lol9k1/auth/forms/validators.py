@@ -12,8 +12,9 @@ class ValidToken(object):
         self.message_invalid = message_invalid if message_invalid else "Invalid or used invite token"
 
     def __call__(self, form, field):
-        maybe_matched_token = field.data
-        if not maybe_matched_token:
+        # the existence of field.data proofs that the token is valid
+        # see: TokenField.process_formdata
+        if not field.data:
             raise ValidationError(self.message_invalid)
 
 

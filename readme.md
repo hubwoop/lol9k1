@@ -9,7 +9,7 @@ Organize your lan party!
 - `pip install -r lol9k1/requirements.txt`
 - `export FLASK_APP=lol9k1`
 - `flask init-db`
-- Generate an admin token for registration: `flask create-admin`
+- Generate an admin token for registration: `flask create-admin-token`
 - Start lol9k1: `flask run`
 
 ### On Windows (pwsh)
@@ -18,7 +18,7 @@ Organize your lan party!
 - `pip install -r lol9k1\requirements.txt`
 - `$env:FLASK_APP="lol9k1"`
 - `flask init-db`
-- Generate an admin token for registration: `flask create-admin`
+- Generate an admin token for registration: `flask create-admin-token`
 - Start lol9k1: `flask run`
 
 ## When deploying
@@ -42,7 +42,8 @@ a random string will be used.
 
 ## CLI commands
 - `flask init-db` - Initializes the database.
-- `flask create-admin` - Creates an admin user invite token.
+- `flask create-admin-token` - Creates an admin user invite token.
+- `flask create-dummy-users` - Creates dummy users.
 
 ## Built With
 

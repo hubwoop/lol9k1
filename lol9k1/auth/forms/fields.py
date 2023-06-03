@@ -11,12 +11,13 @@ class TokenField(Field):
     widget = TextInput()
 
     def _value(self) -> str:
+        # only return the token value if it exists internally and is not used
         if self.data:
             return self.value
         else:
             return ""
 
-    def process_formdata(self, token):
-        if token:
-            self.value = token[0]
-            self.data = database.get_unused_token(token[0])  # type: Token
+    def process_formdata(self, value_list):
+        if value_list:
+            self.value = value_list[0]
+            self.data = database.get_unused_token(value_list[0])  # type: Token

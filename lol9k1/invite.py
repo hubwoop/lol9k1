@@ -1,11 +1,9 @@
-import uuid
-
 from flask import session, current_app, render_template, abort, flash, redirect, url_for, Blueprint, Response
 from markupsafe import Markup
 
 import lol9k1.auth.auth as authentication
-from lol9k1.database import get_db
-from lol9k1.utilities import STYLE
+from lol9k1.database import get_db, add_token
+from lol9k1.utilities import STYLE, generate_token
 
 bp = Blueprint('invite', __name__, url_prefix='/invite')
 
@@ -33,14 +31,17 @@ def generate_invite() -> Response:
     cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
     tokens = cursor.fetchall()[0][0]
     if tokens < 3 or authentication.current_user_is_admin():
-        token = uuid.uuid4().hex[:12]
-        db.execute('insert into invites (token, used, added_by) values (?, ?, ?)',
-                   [token, 0, int(session.get('user_id'))])
-        db.commit()
+        token = create_token(added_by=int(session.get('user_id')))
     else:
         return abort(403)
     flash(Markup(f'Key <code style="user-select: all;">{token}</code> created.'), STYLE.message)
     return redirect(url_for('invite.invite'))
+
+
+def create_token(added_by: int, admin=False) -> str:
+    token = generate_token()
+    add_token(token=token, added_by=added_by, admin=admin)
+    return token
 
 
 @bp.route('/invite/delete/<token>')
