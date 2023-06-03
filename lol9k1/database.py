@@ -8,7 +8,6 @@ from flask import current_app, g
 from flask.cli import with_appcontext
 from slugify import slugify
 from igdb_api_python.igdb import igdb
-from lol9k1 import utilities
 from lol9k1.auth.types import Token
 
 
@@ -95,7 +94,7 @@ def add_slugs_if_missing() -> str:
 @click.command('update-igdb-ids')
 @with_appcontext
 def add_igdb_ids_if_missing() -> str:
-    igdb_connection = utilities.get_igdb()
+    igdb_connection = get_igdb()
     db = get_db()
     cursor = db.execute('select id, name, igdb_id from games')
     game_names = cursor.fetchall()
