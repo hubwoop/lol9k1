@@ -61,6 +61,7 @@ def configure(app, test_config):
         SECRET_KEY=secret,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Strict',
+        ENABLE_BRACKETS=os.environ.get('LOL9K1_ENABLE_BRACKETS', default=False),
     )
     if test_config is None:
         # load the instance config, if it exists, when not testing

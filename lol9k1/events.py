@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, NamedTuple, Tuple
 
 import dateutil.parser
-from flask import session, Blueprint, request, redirect, url_for, flash, render_template, Response, abort
+from flask import session, Blueprint, request, redirect, url_for, flash, render_template, Response, abort, current_app
 
 import lol9k1.utilities as utilities
 from lol9k1.auth import auth
@@ -97,7 +97,8 @@ def event(event_id):
                            teams=teams,
                            users=users,
                            captains=captains,
-                           hasParticipants=has_participants)
+                           hasParticipants=has_participants,
+                           enable_brackets=current_app.config['ENABLE_BRACKETS'])
 
 
 def handle_url_post(event_id):

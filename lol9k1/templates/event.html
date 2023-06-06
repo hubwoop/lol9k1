@@ -76,7 +76,8 @@
           <div class="form-group">
             <label for="description">Description </label>
             <textarea class="form-control" id="description" rows="4" name="description"
-                      style="font-family: monospace;">{% if event.description %}{{ event.description }}{% endif %}</textarea>
+                      style="font-family: monospace;">{% if event.description %}
+              {{ event.description }}{% endif %}</textarea>
             <small class="form-text text-muted">Supports <a href="https://devdocs.io/markdown/">Markdown</a></small>
           </div>
           <button type="submit" class="btn btn-primary">Submit</button>
@@ -85,7 +86,8 @@
       <div class="col">
         <h3>Choose team captains</h3>
         {% if hasParticipants %}
-          <div class="alert alert-danger" role="alert">Alert: If you change team captains now, ALL teams must be rebuilt ¯\_(ツ)_/¯
+          <div class="alert alert-danger" role="alert">Alert: If you change team captains now, ALL teams must be rebuilt
+            ¯\_(ツ)_/¯
           </div>
         {% endif %}
         <form action="{{ url_for('event.event', event_id=event_id) }}" method="post">
@@ -116,19 +118,46 @@
         </div>
       {% endif %}
     </div>
+    {% if teams and enable_brackets %}
+      <hr>
+      <div class="row">
+        <div class="col">
+          <h3>Bracket</h3>
+          <div id="bracket-container"></div>
+          <script>
+            document.addEventListener('DOMContentLoaded', function () {
+              const minimalData = {
+                teams: [
+                  ["Team 1", "Team 2"], /* first matchup */
+                  ["Team 3", "Team 4"]  /* second matchup */
+                ],
+                results: [
+                  [[1, 2], [3, 4]],       /* first round */
+                  [[4, 6], [2, 1]]        /* second round */
+                ]
+              }
+
+              $(function () {
+                $('#bracket-container').bracket({
+                  init: minimalData /* data to initialize the bracket with */
+                })
+              })
+            })
+          </script>
+        </div>
+      </div>
+    {% endif %}
     <hr>
     <script>
-        let clicked = 0;
-
-        function doubleCheck() {
-            let deleteButton = document.getElementById('delete');
-            if (clicked > 0) {
-                window.location = '{{ url_for('event.delete_event', event_id=event_id) }}';
-                return;
-            }
-            alert('Are you sure you want to delete: "{{ event.game }} - Tourney by {{ event.creator }} (Event #{{ event_id }})"?\nClick delete again to confirm.');
-            clicked++;
+      let clicked = 0;
+      function doubleCheck() {
+        if (clicked > 0) {
+          window.location = '{{ url_for('event.delete_event', event_id=event_id) }}';
+          return;
         }
+        alert('Are you sure you want to delete: "{{ event.game }} - Tourney by {{ event.creator }} (Event #{{ event_id }})"?\nClick delete again to confirm.');
+        clicked++;
+      }
     </script>
     <div class="row">
       <div class="col">
@@ -139,3 +168,11 @@
   {% endif %}
 
 {% endblock %}
+{% if teams and enable_brackets %}
+{% block endofbody %}
+  {{ super() }}
+  <script src="https://code.jquery.com/jquery-3.7.0.slim.min.js" integrity="sha256-tG5mcZUtJsZvyKAxYLVXrmjKBVLd6VpVccqz/r4ypFE=" crossorigin="anonymous"></script>
+  <script type="text/javascript" src="{{ url_for('static', filename='js/jquery.bracket.min.js' ) }}"></script>
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/jquery.bracket.min.css' ) }}" />
+{% endblock %}
+{% endif %}

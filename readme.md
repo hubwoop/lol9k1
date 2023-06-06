@@ -39,6 +39,7 @@ a random string will be used.
 - `LOL9K1_SECRET_KEY` - A secret key for the session. If not set, a random string will be used.
 - `LOL9K1_DB_PATH` - The path to the [SQLite database file](https://www.sqlite.org/fileformat.html).
 - [Flask configuration](https://flask.palletsprojects.com/en/2.3.x/config/#configuring-from-environment-variables)
+- Experimental: `LOL9K1_ENABLE_BRACKETS` - Set this to `True` to enable brackets. Defaults to `False`.
 
 ## CLI commands
 - `flask init-db` - Initializes the database.
