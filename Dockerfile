@@ -11,4 +11,4 @@ EXPOSE 9001
 ENV FLASK_APP=lol9k1 \
     FLASK_RUN_PORT=9001
 
-CMD flask run --host=0.0.0.0 --port=9001
+CMD ["flask", "run", "--host=0.0.0.0", "--port=9001"]
