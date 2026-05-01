@@ -310,11 +310,7 @@ def prepare_schedule(fetch_date=None) -> Optional[Schedule]:
 @bp.route('/create', methods=['POST'])
 @auth.login_required
 def create_event() -> Response:
-    game_id = None
-    try:
-        game_id = int(request.form['game'])
-    except (ValueError, AttributeError):
-        pass
+    game_id = request.form.get('game', type=int)
     if not game_id:
         flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return redirect(url_for('landing.landing'))
