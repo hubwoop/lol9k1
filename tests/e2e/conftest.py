@@ -29,10 +29,83 @@ DATETIME_FORMAT = '%Y-%m-%dT%H:%M'  # format used by <input type="datetime-local
 TABLES = ('tournament_participants', 'teams', 'events', 'votes', 'games', 'users', 'invites', 'config')
 
 
+SERVER_START_ATTEMPTS = 3
+SERVER_START_TIMEOUT = 30  # seconds per attempt
+SERVER_STOP_TIMEOUT = 10  # seconds before SIGTERM escalates to SIGKILL
+SERVER_PAGE_MARKER = b'<title>LOL 9001'  # proves that a lol9k1 server answered
+
+
+class _PortTaken(Exception):
+    """The server could not bind its port because another process grabbed it first."""
+
+
 def _free_port() -> int:
+    # The port is released again before flask binds it, so another process may
+    # take it in between. _start_server detects that and retries on a new port.
     with socket.socket() as s:
         s.bind(('127.0.0.1', 0))
         return s.getsockname()[1]
+
+
+def _stop_server(process: subprocess.Popen) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=SERVER_STOP_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
+def _wait_until_ready(process: subprocess.Popen, url: str, log_path: Path) -> None:
+    """
+    Waits until *this* server answers on ``url``. A response alone isn't enough:
+    if our bind failed, some other process may be listening on the port. So the
+    server must have logged that it is running on the port (werkzeug logs that
+    only after a successful bind), must still be alive, and must serve a lol9k1 page.
+    """
+    deadline = time.monotonic() + SERVER_START_TIMEOUT
+    while time.monotonic() < deadline:
+        log = log_path.read_text(errors='replace')
+        if process.poll() is not None:
+            if 'Address already in use' in log or 'is in use by another program' in log:
+                raise _PortTaken(log)
+            raise RuntimeError(f'lol9k1 server exited early (exit code {process.returncode}):\n{log}')
+        if f'Running on {url}' in log:
+            try:
+                with urlopen(f'{url}/', timeout=2) as response:
+                    body = response.read()
+                if SERVER_PAGE_MARKER in body and process.poll() is None:
+                    return
+            except (URLError, OSError):
+                pass
+        time.sleep(0.1)
+    raise RuntimeError(f'lol9k1 server did not come up within {SERVER_START_TIMEOUT}s:\n'
+                       f'{log_path.read_text(errors="replace")}')
+
+
+def _start_server(db_path: Path, log_dir: Path) -> tuple[subprocess.Popen, str, Path]:
+    for attempt in range(1, SERVER_START_ATTEMPTS + 1):
+        port = _free_port()
+        url = f'http://127.0.0.1:{port}'
+        log_path = log_dir / f'server-{attempt}.log'
+        # The child gets its own copy of the file descriptor, so the parent can close it right away.
+        with open(log_path, 'w') as log:
+            process = subprocess.Popen(
+                [sys.executable, '-m', 'flask', 'run', '--host', '127.0.0.1', '--port', str(port)],
+                cwd=REPO_ROOT, env=_server_env(db_path), stdout=log, stderr=subprocess.STDOUT,
+            )
+        try:
+            _wait_until_ready(process, url, log_path)
+            return process, url, log_path
+        except _PortTaken:
+            _stop_server(process)
+        except BaseException:  # includes KeyboardInterrupt
+            _stop_server(process)
+            raise
+    raise RuntimeError(f'lol9k1 server could not bind a free port in {SERVER_START_ATTEMPTS} attempts, '
+                       f'see logs in {log_dir}')
 
 
 def _server_env(db_path: Path) -> dict:
@@ -67,31 +140,12 @@ def db_path(tmp_path_factory) -> Path:
 
 @pytest.fixture(scope='session')
 def live_server(db_path, tmp_path_factory) -> str:
-    port = _free_port()
-    log_path = tmp_path_factory.mktemp('logs') / 'server.log'
-    log = open(log_path, 'w')
-    process = subprocess.Popen(
-        [sys.executable, '-m', 'flask', 'run', '--host', '127.0.0.1', '--port', str(port)],
-        cwd=REPO_ROOT, env=_server_env(db_path), stdout=log, stderr=subprocess.STDOUT,
-    )
-    url = f'http://127.0.0.1:{port}'
-    deadline = time.monotonic() + 30
-    while True:
-        if process.poll() is not None:
-            raise RuntimeError(f'lol9k1 server exited early:\n{log_path.read_text()}')
-        try:
-            urlopen(url, timeout=1)
-            break
-        except URLError:
-            if time.monotonic() > deadline:
-                process.terminate()
-                raise RuntimeError(f'lol9k1 server did not come up:\n{log_path.read_text()}')
-            time.sleep(0.2)
-    yield url
-    process.terminate()
-    process.wait(timeout=10)
-    log.close()
-    print(f'\nServer log: {log_path}')
+    process, url, log_path = _start_server(db_path, tmp_path_factory.mktemp('logs'))
+    try:
+        yield url
+    finally:
+        _stop_server(process)
+        print(f'\nServer log: {log_path}')
 
 
 @pytest.fixture(scope='session')
