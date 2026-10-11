@@ -26,9 +26,9 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           # matches the tiangolo/uwsgi-nginx-flask base image in the Dockerfile
           python-version: '3.11'
@@ -44,7 +44,7 @@ jobs:
         run: python -m pytest --tracing retain-on-failure --screenshot only-on-failure --output test-results
       - name: Upload Playwright traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-traces
           path: test-results/
