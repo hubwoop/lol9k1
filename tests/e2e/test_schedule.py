@@ -1,4 +1,7 @@
 """The party schedule and creating tournaments (events)."""
+import re
+
+import pytest
 from playwright.sync_api import Page, expect
 
 from conftest import DATETIME_FORMAT, expect_flash, login
@@ -106,3 +109,99 @@ def test_event_outside_of_party_is_rejected(page: Page, seed, party, alice):
     assert response.ok
     assert 'Event not in party boundaries' in response.text()
     assert seed.query('select * from events') == []
+
+
+def post_event(page: Page, game_id: int, start: str, end: str, mode: str = '1'):
+    return page.request.post('/event/create', form={'game': str(game_id), 'start': start, 'end': end, 'mode': mode})
+
+
+def test_create_event_without_party_dates_is_rejected(page: Page, seed, alice):
+    game_id = seed.game('Worms', added_by=alice)
+    login(page, alice)
+
+    response = post_event(page, game_id, '2030-01-01T10:00', '2030-01-01T12:00')
+
+    assert response.ok
+    assert 'The administrators have yet to set a date for this LAN.' in response.text()
+    assert seed.query('select * from events') == []
+
+
+def test_event_with_same_start_and_end_is_rejected(page: Page, seed, party, alice):
+    game_id = seed.game('Worms', added_by=alice)
+    login(page, alice)
+
+    at = party.at(0, 14).strftime(DATETIME_FORMAT)
+    response = post_event(page, game_id, at, at)
+
+    assert response.ok
+    assert 'Event not in party boundaries' in response.text()
+    assert seed.query('select * from events') == []
+
+
+@pytest.mark.parametrize('suffix', ["'", ' of', '+02:00'])
+def test_malformed_event_datetime_is_rejected(page: Page, seed, party, alice, suffix):
+    game_id = seed.game('Worms', added_by=alice)
+    login(page, alice)
+
+    response = post_event(page, game_id, party.at(0, 10).strftime(DATETIME_FORMAT) + suffix,
+                          party.at(0, 12).strftime(DATETIME_FORMAT))
+
+    assert response.ok
+    assert response.url.endswith('/schedule/')
+    assert seed.query('select * from events') == []
+
+
+def test_event_with_unknown_mode_is_rejected(page: Page, seed, party, alice):
+    game_id = seed.game('Worms', added_by=alice)
+    login(page, alice)
+
+    response = post_event(page, game_id, party.at(0, 10).strftime(DATETIME_FORMAT),
+                          party.at(0, 12).strftime(DATETIME_FORMAT), mode='99')
+
+    assert response.ok
+    assert 'Unknown tournament mode' in response.text()
+    assert seed.query('select * from events') == []
+
+
+def test_event_datetimes_are_stored_normalised(page: Page, seed, party, alice):
+    game_id = seed.game('Worms', added_by=alice)
+    login(page, alice)
+
+    response = post_event(page, game_id, party.at(0, 10, 30).strftime('%Y-%m-%dT%H:%M:%S'),
+                          party.at(0, 12).strftime('%Y-%m-%d %H:%M:%S.%f'))
+
+    assert response.ok
+    rows = seed.query('select start_datetime, end_datetime from events')
+    assert [tuple(r) for r in rows] == [(party.at(0, 10, 30).strftime(DATETIME_FORMAT),
+                                         party.at(0, 12).strftime(DATETIME_FORMAT))]
+
+
+def test_schedule_tolerates_events_with_unknown_mode(page: Page, seed, party, alice):
+    game_id = seed.game('Worms', added_by=alice)
+    seed.event(game_id, creator=alice, start=party.at(0, 10), end=party.at(0, 12), mode=99)
+    login(page, alice)
+
+    page.goto('/schedule/')
+
+    expect(page.locator('#calendar').get_by_text('Worms Tournament')).to_be_visible()
+
+
+def test_schedule_escapes_event_data(page: Page, seed, party, alice):
+    evil_name = "Evil'</script><script>window.__xss=1</script>"
+    evil_game = seed.game(evil_name, added_by=alice)
+    seed.event(evil_game, creator=alice, start=party.at(0, 10), end=party.at(0, 12))
+    quoted_game = seed.game('Quake', added_by=alice)
+    with seed._connect() as db:
+        db.execute('insert into events (game, start_datetime, end_datetime, created_by, mode) values (?, ?, ?, ?, ?)',
+                   [quoted_game, party.at(0, 14).strftime(DATETIME_FORMAT) + "'",
+                    party.at(0, 16).strftime(DATETIME_FORMAT), alice.id, '1'])
+    login(page, alice)
+
+    page.goto('/schedule/')
+
+    calendar = page.locator('#calendar')
+    expect(calendar.get_by_text('Best LAN Ever').first).to_be_visible()
+    # the calendar strips tags from titles, but the script must not be broken out of
+    expect(calendar.get_by_text(re.compile(r"^Evil'.* Tournament$"))).to_be_visible()
+    expect(calendar.get_by_text('Quake Tournament')).to_be_visible()
+    assert page.evaluate('window.__xss') is None

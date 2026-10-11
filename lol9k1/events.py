@@ -313,7 +313,7 @@ def create_event() -> Response:
     game_id = None
     try:
         game_id = int(request.form['game'])
-    except (ValueError, AttributeError):
+    except (KeyError, ValueError, AttributeError):
         pass
     if not game_id:
         flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
@@ -330,18 +330,32 @@ def create_event() -> Response:
     return redirect(url_for('event.event', event_id=result.event.id))
 
 
+EVENT_DATETIME_FORMAT = '%Y-%m-%dT%H:%M'
+
+
+def parse_event_datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is not None:
+        raise ValueError('time zone offsets are not supported')
+    return parsed.replace(second=0, microsecond=0)
+
+
 def handle_event_post(game_id) -> EventCreationResult:
     if request.args.get('fetch_date', None):
         return EventCreationResult((utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning), None)
     try:
-        start = dateutil.parser.parse(request.form['start'])
-        end = dateutil.parser.parse(request.form['end'])
+        start = parse_event_datetime(request.form['start'])
+        end = parse_event_datetime(request.form['end'])
         mode = int(request.form['mode'])
     except (KeyError, ValueError, OverflowError):
         return EventCreationResult((utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning), None)
+    if mode not in utilities.MODE_INT_TO_STRING:
+        return EventCreationResult(('Unknown tournament mode', STYLE.warning), None)
 
-    party_end = dateutil.parser.parse(get_party_end_date())
-    party_start = dateutil.parser.parse(get_party_start_date())
+    party_end, party_start = get_party_start_and_end()
+    if not party_start or not party_end:
+        return EventCreationResult(('The administrators have yet to set a date for this LAN.', STYLE.warning),
+                                   None)
     if start < party_start or start >= party_end or end > party_end or end <= party_start or start >= end:
         return EventCreationResult(('Event not in party boundaries', STYLE.warning), None)
     db = get_db()
@@ -349,7 +363,8 @@ def handle_event_post(game_id) -> EventCreationResult:
     cursor.execute('''
         insert into events (game, start_datetime, end_datetime, created_by, mode)
         values (?, ?, ?, ?, ?)
-      ''', (game_id, request.form['start'], request.form['end'], session.get('user_id'), mode))
+      ''', (game_id, start.strftime(EVENT_DATETIME_FORMAT), end.strftime(EVENT_DATETIME_FORMAT),
+            session.get('user_id'), mode))
     event_row = cursor.execute('''select * from events where id=?''', [cursor.lastrowid]).fetchone()
     db.commit()
     return EventCreationResult(("Tournament erstellt!", STYLE.success), Event(*event_row))
@@ -360,8 +375,11 @@ def get_party_start_and_end() -> (Optional[datetime], Optional[datetime]):
     end = get_party_end_date()
     if not start or not end:
         return None, None
-    start = dateutil.parser.parse(get_party_start_date())
-    end = dateutil.parser.parse(get_party_end_date())
+    try:
+        start = dateutil.parser.parse(start).replace(tzinfo=None)
+        end = dateutil.parser.parse(end).replace(tzinfo=None)
+    except (ValueError, OverflowError):
+        return None, None
     return end, start
 
 
@@ -376,17 +394,35 @@ def get_surrounding_dates_if_possible(end, fetch_date, start) -> (datetime, date
     return next_party_day, previous_party_day
 
 
+def mode_to_string(mode) -> str:
+    try:
+        return utilities.MODE_INT_TO_STRING.get(int(mode), 'Unknown')
+    except (TypeError, ValueError):
+        return 'Unknown'
+
+
+def normalise_stored_datetime(value) -> Optional[str]:
+    try:
+        return dateutil.parser.parse(str(value)).replace(tzinfo=None).strftime(EVENT_DATETIME_FORMAT)
+    except (ValueError, OverflowError):
+        return None
+
+
 def format_events(fetch_date, events) -> List[dict]:
     formatted_events = []
     for row in events:
         event_id = row[0]
+        start, end = normalise_stored_datetime(row[2]), normalise_stored_datetime(row[3])
+        if not start or not end:
+            current_app.logger.warning('Skipping event %s with invalid dates in schedule', event_id)
+            continue
         formatted_events.append({
             'id': event_id,
             'game': row[1],
-            'start': row[2],
-            'end': row[3],
+            'start': start,
+            'end': end,
             'created_by': row[4],
-            'mode': utilities.MODE_INT_TO_STRING[int(row[5])],
+            'mode': mode_to_string(row[5]),
             'state': row[6],
         })
     return formatted_events
