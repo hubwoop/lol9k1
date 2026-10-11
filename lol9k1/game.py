@@ -1,4 +1,4 @@
-from flask import (Blueprint, render_template)
+from flask import Blueprint, render_template, abort
 
 from lol9k1 import events
 from lol9k1.auth import auth
@@ -12,8 +12,9 @@ bp = Blueprint('game', __name__, url_prefix='/game')
 def game_detail(game) -> str:
     db = get_db()
     game_row = db.execute('select * from games where slug = ?', [game]).fetchone()
-    games_events = events.get_all_by_game(game_row[0])
-    return render_template('game.html', game_row=game_row, page_title=game_row[1], events=games_events)
+    if not game_row:
+        abort(404)
+    return render_template('game.html', game_row=game_row, events=events.get_all_by_game(game_row['id']))
 
 
 def get_all():

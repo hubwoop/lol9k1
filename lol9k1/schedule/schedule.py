@@ -10,7 +10,7 @@ bp = Blueprint('schedule', __name__, url_prefix='/schedule', template_folder='te
 @bp.route('/')
 @auth.login_required
 def schedule() -> str:
-    end, start = events.get_party_start_and_end()
+    start, end = events.get_party_start_and_end()
     if not start or not end:
         return "The administrators have yet to set a date for this LAN."
     return render_template('schedule/schedule.html',

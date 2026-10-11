@@ -34,7 +34,7 @@ def admin_required(view):
 
 
 def current_user_is_admin() -> bool:
-    return g.user and session and not session.modified and 'is_admin' in session and session['is_admin']
+    return bool(g.user and g.user['is_admin'])
 
 
 @bp.route('/login', methods=('GET', 'POST'))
@@ -58,7 +58,7 @@ def get_user_by_name(name) -> Optional[User]:
     try:
         cursor = database.get_db().execute('select * from users where name = (?)', [name])
     except sqlite3.Error:
-        flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
+        flash(utilities.DEFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return None
     result = cursor.fetchone()
     if result is None:
@@ -76,11 +76,7 @@ def initialize_session_for(user):
 
 @bp.route('/logout')
 def logout() -> Response:
-    session.pop('logged_in', None)
-    session.pop('user_id', None)
-    session.pop('is_admin', None)
-    session.pop('username', None)
-    session.pop('redirect_target_after_login', None)
+    session.clear()
     flash("You've logged out.", STYLE.message)
     return redirect(url_for('landing.landing'))
 

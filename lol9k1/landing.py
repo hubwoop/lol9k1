@@ -3,7 +3,7 @@ import random
 import sqlite3
 
 from flask import (
-    Blueprint, flash, redirect, render_template, request, session, url_for, Response
+    Blueprint, flash, redirect, render_template, request, session, url_for, Response, abort
 )
 from markupsafe import Markup
 from slugify import slugify
@@ -62,15 +62,13 @@ order by {'score desc' if order_by_score else 'games.name asc'}
 @bp.route('/add', methods=['POST'])
 @auth.login_required
 def add_game() -> Response:
-    db = get_db()
     title = request.form['title']
-    cursor = db.execute('select id from games where slug = ?', [slugify(request.form['title'])])
-    games_row = cursor.fetchone()
+    games_row = get_db().execute('select id from games where slug = ?', [slugify(title)]).fetchone()
     if games_row:
-        game_id = games_row[0]
-        flash(Markup('Game <a href="#gameRow-{}">{}</a> has already been added!').format(game_id, title), STYLE.error)
+        flash(Markup('Game <a href="#gameRow-{}">{}</a> has already been added!').format(games_row[0], title),
+              STYLE.error)
     else:
-        game_id = add_game_to_db()
+        game_id = add_game_to_db(title)
         flash(Markup('You added game (<a href="#gameRow-{}">{}</a>).').format(game_id, title), STYLE.success)
     return redirect(url_for('landing.landing'))
 
@@ -82,7 +80,7 @@ def game_vote(game, vote) -> Response:
     game = int(game)
     db = get_db()
     if abs(vote) != 1 or not db.execute('select id from games where id = ?', [game]).fetchone():
-        flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
+        flash(utilities.DEFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return redirect(url_for('landing.landing'))
     user = session.get('user_id')
     cursor = db.execute('select vote from votes where user = ? and game = ?', [user, game])
@@ -108,64 +106,41 @@ def game_vote(game, vote) -> Response:
 @auth.admin_required
 def delete_game(game_id: int) -> Response:
     db = get_db()
-    game = db.execute('select name from games where id = ?', [game_id]).fetchone()[0]
+    row = db.execute('select name from games where id = ?', [game_id]).fetchone()
+    if not row:
+        abort(404)
+    game = row[0]
     try:
         db.execute('delete from votes where game = ?', [game_id])
         db.execute('delete from events where game = ?', [game_id])
         db.execute('delete from games where id = ?', [game_id])
         db.commit()
     except sqlite3.Error as e:
+        db.rollback()
         flash(f'Something went wrong during deletion of game "{game}": {e}', STYLE.error)
-    flash(f"Game {game} deleted.", STYLE.message)
+    else:
+        flash(f"Game {game} deleted.", STYLE.message)
     return redirect(url_for('landing.landing'))
 
 
-def add_game_to_db() -> int:
-    description, max_players, low_spec, available, no_drm = __validate_input()
-    __add_games_row(available, description, low_spec, max_players, no_drm, request.form['title'])
-    game = __add_games_vote_row()
-    return game
-
-
-def __add_games_row(available, description, low_spec, max_players, no_drm, title) -> None:
+def add_game_to_db(title: str) -> int:
+    """Adds the game from the form. The user who adds it votes for it."""
+    form = request.form
+    try:
+        max_players = int(form['max_players'])
+    except (KeyError, ValueError):
+        max_players = None
+    description = form.get('description') or None
+    no_drm = 1 if 'no_drm' in form else None
+    available = 1 if 'available' in form else None
+    low_spec = 1 if 'low_spec' in form else None
+    user_id = session.get('user_id')
     db = get_db()
-    db.execute(
+    game_id = db.execute(
         'insert into games (name, slug, max_players, description, no_drm, available, low_spec, added_by) '
         'values (?, ?, ?, ?, ?, ?, ?, ?)',
-        [title, slugify(title), max_players, description, no_drm, available, low_spec, session.get('user_id')]
-    )
+        [title, slugify(title), max_players, description, no_drm, available, low_spec, user_id]
+    ).lastrowid
+    db.execute('insert into votes (user, game, vote) values (?, ?, 1)', [user_id, game_id])
     db.commit()
-
-
-def __add_games_vote_row() -> int:
-    db = get_db()
-    game = db.execute('select id from games where name = ?', [request.form['title']]).fetchone()[0]
-    db.execute('insert into votes (user, game, vote) values (?, ?, ?)', [session.get('user_id'), game, 1])
-    db.commit()
-    return game
-
-
-def __validate_input() -> (str, str, str, str, str):
-    max_players = None
-    if 'max_players' in request.form:
-        try:
-            max_players = int(request.form['max_players'])
-        except ValueError:
-            pass
-    if 'description' in request.form and not request.form['description']:
-        description = None
-    else:
-        description = request.form['description']
-    if 'low_spec' in request.form:
-        low_spec = 1
-    else:
-        low_spec = None
-    if 'available' in request.form:
-        available = 1
-    else:
-        available = None
-    if 'no_drm' in request.form:
-        no_drm = 1
-    else:
-        no_drm = None
-    return description, max_players, low_spec, available, no_drm
+    return game_id

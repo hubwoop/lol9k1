@@ -43,3 +43,13 @@ def test_admin_cannot_set_end_before_start(page: Page, seed, admin):
     expect(page.get_by_role('alert')).to_contain_text('Choose a valid time span.')
     expect(page.get_by_role('alert').filter(has_text='Settings updated.')).to_have_count(0)
     assert seed.query('select * from config') == []
+
+
+def test_admin_unparsable_dates_are_rejected(page: Page, seed, admin):
+    login(page, admin)
+
+    response = page.request.post('/admin/admin', form={'date_start': 'tomorrow-ish', 'date_end': '2030-07-14T12:00'})
+
+    assert response.ok
+    assert 'Choose a valid time span.' in response.text()
+    assert seed.query('select * from config') == []

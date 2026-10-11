@@ -23,7 +23,7 @@ def administration() -> str:
 
 
 def handle_form_posts() -> None:
-    if request.method == 'POST' and hasattr(request, 'form') and valid_date_received():
+    if request.method == 'POST' and valid_dates_received():
         store_form()
         flash("Settings updated.", STYLE.message)
 
@@ -31,15 +31,15 @@ def handle_form_posts() -> None:
 def store_form() -> None:
     db = database.get_db()
     for key, value in request.form.items():
-        db.execute('delete from config where key = ?', [key])
-        db.execute(f'insert into config (key, value) values (?, ?) ', [key, value])
+        db.execute('insert or replace into config (key, value) values (?, ?)', [key, value])
     db.commit()
 
 
-def valid_date_received():
-    start_date = date_parser.parse(request.form['date_start'])
-    end_date = date_parser.parse(request.form['date_end'])
-    if start_date >= end_date:
+def valid_dates_received() -> bool:
+    try:
+        valid = date_parser.parse(request.form['date_start']) < date_parser.parse(request.form['date_end'])
+    except (ValueError, OverflowError, TypeError):  # TypeError: one has a time zone, the other doesn't
+        valid = False
+    if not valid:
         flash(Markup(INVALID_DATES), STYLE.error)
-        return False
-    return True
+    return valid

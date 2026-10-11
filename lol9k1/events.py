@@ -2,7 +2,7 @@ import json
 import random
 from collections import namedtuple
 from datetime import datetime
-from typing import List, Optional, NamedTuple, Tuple
+from typing import List, Optional, Tuple
 from urllib.parse import urlparse
 
 import dateutil.parser
@@ -22,26 +22,6 @@ Captain = namedtuple('captain', ['name', 'id', 'team', 'team_id'])
 PickDetails = namedtuple('PickDetails', ['pick_order', 'currently_picking'])
 
 
-class Event(NamedTuple):
-    id: int
-    game: int
-    start_datetime: datetime
-    end_datetime: datetime
-    created_by: int
-    mode: str
-    state: Optional[str]
-    description: Optional[str]
-    external_url: Optional[str]
-    pick_order: Optional[str]
-    currently_picking: Optional[int]
-    skips: int = 0
-
-
-class EventCreationResult(NamedTuple):
-    response: Tuple[str, str]
-    event: Optional[Event]
-
-
 MAX_TEAM_NAME_LENGTH = 50
 
 bp = Blueprint('event', __name__, url_prefix='/event')
@@ -50,21 +30,15 @@ bp = Blueprint('event', __name__, url_prefix='/event')
 @bp.route('/<int:event_id>', methods=['GET', 'POST'])
 @auth.login_required
 def event(event_id):
-    event_details = get_details(event_id)  # type: Details
+    event_details = get_details(event_id)
     if not event_details:
-        # user tries to call nonexistent event
         flash("The selected event does not exist (anymore).", STYLE.error)
         return redirect(url_for('landing.landing'))
-    page_title = f"{event_details.game} Event #{event_id} -  by {event_details.creator}"
     if event_details.state:
-        return render_template('pick.html',
-                               page_title=page_title,
-                               event_id=event_id,
-                               event=event_details,
-                               user_id=session.get('user_id'))
+        return render_template('pick.html', event_id=event_id, event=event_details)
     if request.method == 'POST':
         if not user_may_manage(event_details.creator_id):
-            flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
+            flash(utilities.DEFAULT_REFUSAL_MESSAGE, STYLE.warning)
             return redirect(url_for('.event', event_id=event_id))
         handle_url_post(event_id)
         handle_description_post(event_id)
@@ -73,32 +47,21 @@ def event(event_id):
         if not event_details:
             flash("The selected event does not exist (anymore).", STYLE.error)
             return redirect(url_for('landing.landing'))
-    participants_rows = get_all_participants_for(event_id)
-    teams = build_teams(participants_rows)
+    teams = get_participants(event_id)
     if request.method == 'POST' and 'initiate-picking' in request.form:
         if not teams:
             flash('Picking teams does only make sense when teams exist :> '
                   'You need to assign team captains for that.', STYLE.message)
-            return redirect(url_for('.event', event_id=event_id))
-        initialize_pick_phase(event_id)
-        return render_template('pick.html',
-                               page_title=page_title,
-                               event_id=event_id,
-                               event=event_details)
+        else:
+            initialize_pick_phase(event_id)
+        return redirect(url_for('.event', event_id=event_id))
     db = get_db()
-    users = db.execute('''select id, name, gender from users order by name asc''').fetchall()
-    captain_rows = db.execute(
-        '''select user from tournament_participants where is_team_captain = 1 and tournament = ?''',
-        [event_id]).fetchall()
+    users = db.execute('select id, name, gender from users order by name asc').fetchall()
+    captain_rows = db.execute('select user from tournament_participants where is_team_captain = 1 and tournament = ?',
+                              [event_id]).fetchall()
     captains = [row[0] for row in captain_rows]
-    has_participants = False
-    if teams:
-        for team in teams.values():
-            if len(team.players) > 1:
-                has_participants = True
-                break
+    has_participants = any(len(team.players) > 1 for team in (teams or {}).values())
     return render_template('event.html',
-                           page_title=page_title,
                            event_id=event_id,
                            event=event_details,
                            teams=teams,
@@ -109,11 +72,7 @@ def event(event_id):
 
 
 def handle_url_post(event_id):
-    try:
-        url = request.form['external_url']
-    except KeyError:
-        url = None
-    url = url.strip() if url else None
+    url = request.form.get('external_url', '').strip()
     if not url:
         return
     if not is_http_url(url):
@@ -132,20 +91,15 @@ def user_may_manage(creator_id) -> bool:
 
 
 def handle_description_post(event_id):
-    try:
-        description = request.form['description']
-    except KeyError:
-        description = None
+    description = request.form.get('description')
     if description:
         update_description(event_id, description)
 
 
 def handle_captains_post(event_id):
-    try:
-        captains = request.form.getlist('checked-captains')
-    except (KeyError, ValueError):
-        captains = None
-    if captains or type(captains) == list and 'check-captains' in request.form:
+    # unchecking every captain sends no checked-captains at all, check-captains tells that form apart
+    captains = request.form.getlist('checked-captains')
+    if captains or 'check-captains' in request.form:
         update_captains(event_id, captains)
 
 
@@ -213,7 +167,7 @@ def add_teammate_api(event_id, team_id):
             or team_id != currently_picking_team \
             or event_state != 'pickphase' \
             or requested_user not in possible_users:
-        return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
+        return json.dumps(utilities.DEFAULT_REFUSAL_MESSAGE)
     # add requested user to requesting team
     db.execute('''insert into tournament_participants (user, tournament, team) values (?, ? ,?)''',
                (requested_user, event_id, team_id))
@@ -242,7 +196,7 @@ def skip_picking_teammate_api(event_id, team_id):
     currently_picking_team = get_currently_picking(event_id)
     event_state = get_state(event_id)
     if not user_allowed_to_skip(event_id, currently_picking_team, team_id, event_state):
-        return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
+        return json.dumps(utilities.DEFAULT_REFUSAL_MESSAGE)
     pick_order = get_pick_order(event_id)
     skips = increase_skips_for(event_id)
     if skips >= len(pick_order):
@@ -267,13 +221,13 @@ def set_team_name_api(team_id):
     if captain is None:
         abort(404)
     if not auth.current_user_is_admin() and int(session.get('user_id')) != int(captain):
-        return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
+        return json.dumps(utilities.DEFAULT_REFUSAL_MESSAGE)
     new_name = request.get_json(silent=True)
     if not isinstance(new_name, str):
         abort(400)
     new_name = new_name.strip()
     if not new_name or len(new_name) > MAX_TEAM_NAME_LENGTH:
-        return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
+        return json.dumps(utilities.DEFAULT_REFUSAL_MESSAGE)
     set_team_name(team_id, new_name)
     return json.dumps("yep :)!")
 
@@ -286,31 +240,28 @@ def delete_event(event_id) -> Response:
         flash(f"Deleted event {event_id}.", STYLE.message)
         return redirect(url_for('game.game_detail', game=game))
     else:
-        flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
+        flash(utilities.DEFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return redirect(url_for('landing.landing'))
 
 
 @bp.route('/create', methods=['POST'])
 @auth.login_required
 def create_event() -> Response:
-    game_id = None
     try:
         game_id = int(request.form['game'])
-    except (KeyError, ValueError, AttributeError):
-        pass
+    except (KeyError, ValueError):
+        game_id = None
     if not game_id:
-        flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
+        flash(utilities.DEFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return redirect(url_for('landing.landing'))
-    db = get_db()
-    games_row = db.execute('select * from games where id = ?', [game_id]).fetchone()
-    if not games_row:
+    if not get_db().execute('select id from games where id = ?', [game_id]).fetchone():
         abort(404)
-    result = handle_event_post(games_row[0])
-    if result.response:
-        flash(*result.response)
-    if not result.event:
+    event_id, refusal = handle_event_post(game_id)
+    if refusal:
+        flash(refusal, STYLE.warning)
         return redirect(url_for('schedule.schedule'))
-    return redirect(url_for('event.event', event_id=result.event.id))
+    flash("Tournament erstellt!", STYLE.success)
+    return redirect(url_for('event.event', event_id=event_id))
 
 
 EVENT_DATETIME_FORMAT = '%Y-%m-%dT%H:%M'
@@ -323,35 +274,31 @@ def parse_event_datetime(value: str) -> datetime:
     return parsed.replace(second=0, microsecond=0)
 
 
-def handle_event_post(game_id) -> EventCreationResult:
+def handle_event_post(game_id) -> Tuple[Optional[int], Optional[str]]:
+    """Creates the event from the form. Returns its id, or None and why it was refused."""
     try:
         start = parse_event_datetime(request.form['start'])
         end = parse_event_datetime(request.form['end'])
         mode = int(request.form['mode'])
     except (KeyError, ValueError, OverflowError):
-        return EventCreationResult((utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning), None)
+        return None, utilities.DEFAULT_REFUSAL_MESSAGE
     if mode not in utilities.MODE_INT_TO_STRING:
-        return EventCreationResult(('Unknown tournament mode', STYLE.warning), None)
-
-    party_end, party_start = get_party_start_and_end()
+        return None, 'Unknown tournament mode'
+    party_start, party_end = get_party_start_and_end()
     if not party_start or not party_end:
-        return EventCreationResult(('The administrators have yet to set a date for this LAN.', STYLE.warning),
-                                   None)
-    if start < party_start or start >= party_end or end > party_end or end <= party_start or start >= end:
-        return EventCreationResult(('Event not in party boundaries', STYLE.warning), None)
+        return None, 'The administrators have yet to set a date for this LAN.'
+    if not party_start <= start < end <= party_end:
+        return None, 'Event not in party boundaries'
     db = get_db()
-    cursor = db.cursor()
-    cursor.execute('''
-        insert into events (game, start_datetime, end_datetime, created_by, mode)
-        values (?, ?, ?, ?, ?)
-      ''', (game_id, start.strftime(EVENT_DATETIME_FORMAT), end.strftime(EVENT_DATETIME_FORMAT),
-            session.get('user_id'), mode))
-    event_row = cursor.execute('''select * from events where id=?''', [cursor.lastrowid]).fetchone()
+    cursor = db.execute(
+        'insert into events (game, start_datetime, end_datetime, created_by, mode) values (?, ?, ?, ?, ?)',
+        (game_id, start.strftime(EVENT_DATETIME_FORMAT), end.strftime(EVENT_DATETIME_FORMAT),
+         session.get('user_id'), mode))
     db.commit()
-    return EventCreationResult(("Tournament erstellt!", STYLE.success), Event(*event_row))
+    return cursor.lastrowid, None
 
 
-def get_party_start_and_end() -> (Optional[datetime], Optional[datetime]):
+def get_party_start_and_end() -> Tuple[Optional[datetime], Optional[datetime]]:
     start = get_party_start_date()
     end = get_party_end_date()
     if not start or not end:
@@ -361,7 +308,7 @@ def get_party_start_and_end() -> (Optional[datetime], Optional[datetime]):
         end = dateutil.parser.parse(end).replace(tzinfo=None)
     except (ValueError, OverflowError):
         return None, None
-    return end, start
+    return start, end
 
 
 def mode_to_string(mode) -> str:
@@ -458,7 +405,6 @@ def initialize_pick_phase(event_id: int):
     db.execute('''update events set state = ?, pick_order = ?, currently_picking = ? where id = ?''',
                ("pickphase", json.dumps(pick_order), pick_order[0], event_id))
     db.commit()
-    return True
 
 
 def get_all_participants_for(event_id):
@@ -479,10 +425,7 @@ def get_details(event_id) -> Optional[Details]:
         join games g on e.game = g.id
       where e.id = ?
     ''', [event_id]).fetchone()
-    if row is None:
-        return None
-    event_details = Details(*row)
-    return event_details
+    return Details(*row) if row else None
 
 
 def delete_with_all_dependencies_in_database(event_id):

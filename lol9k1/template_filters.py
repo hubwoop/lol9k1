@@ -10,18 +10,15 @@ from . import utilities
 
 def register_on(app):
     @app.template_filter('strftime')
-    def format_date_time_string(date: str, fmt=None) -> str:
-        date = date_parser.parse(date)
-        native = date.replace(tzinfo=None)
-        the_format = '%d.%m.%y <strong>%H:%M</strong>'
-        return native.strftime(the_format)
+    def format_date_time_string(date: str) -> str:
+        return date_parser.parse(date).strftime('%d.%m.%y <strong>%H:%M</strong>')
 
     @app.template_filter('gender')
-    def translate_gender(gender: Union[int, str], fmt=None) -> str:
+    def translate_gender(gender: Union[int, str]) -> str:
         return utilities.GENDER_INT_TO_STRING[int(gender)]
 
     @app.template_filter('slugify')
-    def translate_gender(string: str, fmt=None) -> str:
+    def slugify_filter(string: str) -> str:
         return slugify(string)
 
     @app.template_filter('markdown')

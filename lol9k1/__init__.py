@@ -7,12 +7,6 @@ def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
     configure(app, test_config)
 
-    # ensure the instance folder exists
-    try:
-        os.makedirs(app.instance_path)
-    except OSError:
-        pass
-
     from . import template_filters
     template_filters.register_on(app)
 
@@ -43,6 +37,10 @@ def create_app(test_config=None):
     return app
 
 
+def env_flag(name: str, default: str) -> bool:
+    return os.environ.get(name, default=default).lower() in ('true', '1', 'yes')
+
+
 def configure(app, test_config):
     db_path = os.environ.get(
         'LOL9K1_DB_PATH',
@@ -59,9 +57,8 @@ def configure(app, test_config):
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Strict',
         # served behind TLS; the debug server and the e2e tests run on plain http
-        SESSION_COOKIE_SECURE=not get_debug_flag()
-        and os.environ.get('LOL9K1_SECURE_COOKIE', default='True').lower() in ('true', '1', 'yes'),
-        ENABLE_BRACKETS=os.environ.get('LOL9K1_ENABLE_BRACKETS', default='False').lower() in ('true', '1', 'yes'),
+        SESSION_COOKIE_SECURE=not get_debug_flag() and env_flag('LOL9K1_SECURE_COOKIE', default='True'),
+        ENABLE_BRACKETS=env_flag('LOL9K1_ENABLE_BRACKETS', default='False'),
     )
     if test_config is None:
         # load the instance config, if it exists, when not testing

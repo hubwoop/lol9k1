@@ -109,3 +109,19 @@ def test_regular_user_cannot_delete_game_via_url(page: Page, seed, alice):
 
     assert response.status == 403
     assert [r['name'] for r in seed.query('select name from games')] == ['Counter-Strike 1.6']
+
+
+def test_unknown_game_page_is_not_found(page: Page, alice):
+    login(page, alice)
+
+    response = page.goto('/game/no-such-game')
+
+    assert response.status == 404
+
+
+def test_admin_deleting_unknown_game_is_not_found(page: Page, admin):
+    login(page, admin)
+
+    response = page.goto('/delete/game/999')
+
+    assert response.status == 404
