@@ -27,6 +27,17 @@ def test_event_page_shows_details(page: Page, alice, alices_event):
     expect(page.get_by_role('heading', name='Worms')).to_be_visible()
 
 
+def test_event_page_loads_no_bracket_scripts_while_brackets_are_disabled(page: Page, alice, alices_event, base_url):
+    requested = []
+    page.on('request', lambda request: requested.append(request.url))
+    login(page, alice)
+
+    page.goto(f'/event/{alices_event}')
+
+    expect(page.get_by_role('heading', name='Edit event details')).to_be_visible()
+    assert not [url for url in requested if 'bracket' in url or not url.startswith(base_url)]
+
+
 def test_game_page_lists_its_events(page: Page, alice, alices_event):
     login(page, alice)
 

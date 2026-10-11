@@ -137,10 +137,8 @@
                 ]
               }
 
-              $(function () {
-                $('#bracket-container').bracket({
-                  init: minimalData /* data to initialize the bracket with */
-                })
+              $('#bracket-container').bracket({
+                init: minimalData /* data to initialize the bracket with */
               })
             })
           </script>
@@ -168,11 +166,11 @@
   {% endif %}
 
 {% endblock %}
-{% if teams and enable_brackets %}
 {% block endofbody %}
   {{ super() }}
-  <script src="https://code.jquery.com/jquery-3.7.0.slim.min.js" integrity="sha256-tG5mcZUtJsZvyKAxYLVXrmjKBVLd6VpVccqz/r4ypFE=" crossorigin="anonymous"></script>
-  <script type="text/javascript" src="{{ url_for('static', filename='js/jquery.bracket.min.js' ) }}"></script>
-  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/jquery.bracket.min.css' ) }}" />
+  {# a block is always rendered, so the condition has to be inside of it #}
+  {% if teams and enable_brackets %}
+    <script src="{{ url_for('static', filename='js/jquery.bracket.min.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/jquery.bracket.min.css') }}">
+  {% endif %}
 {% endblock %}
-{% endif %}
