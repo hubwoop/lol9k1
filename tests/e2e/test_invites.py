@@ -82,3 +82,12 @@ def test_used_token_is_marked_and_frees_a_slot(page: Page, new_context, alice):
     expect(page.locator('li.inviteUsed')).to_have_text(token)
     expect(page.get_by_role('link', name=token)).to_have_count(0)
     expect(page.get_by_text('You can create 3 more tokens.')).to_be_visible()
+
+
+def test_token_in_delete_message_is_escaped(page: Page, alice):
+    login(page, alice)
+
+    page.goto('/invite/invite/delete/<em>sneaky<em>')
+
+    expect_flash(page, 'Key <em>sneaky<em> deleted.')
+    expect(page.get_by_role('alert').locator('em')).to_have_count(0)

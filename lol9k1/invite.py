@@ -11,30 +11,28 @@ bp = Blueprint('invite', __name__, url_prefix='/invite')
 @bp.route('/invite')
 @authentication.login_required
 def invite() -> str:
-    db = get_db()
-    cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
     if authentication.current_user_is_admin():
         tokens_left = "∞"
     else:
-        tokens_left = current_app.config.get('MAX_INVITE_TOKENS') - int(cursor.fetchall()[0][0])
-        if tokens_left < 1:
-            tokens_left = None
-    cursor = db.execute('select token, used from invites where added_by = ?', [session.get('user_id')])
-    invites = cursor.fetchall()
+        tokens_left = max(current_app.config['MAX_INVITE_TOKENS'] - count_unused_invites(), 0)
+    invites = get_db().execute('select token, used from invites where added_by = ?',
+                               [session.get('user_id')]).fetchall()
     return render_template('invite.html', invites=invites, tokens_left=tokens_left)
+
+
+def count_unused_invites() -> int:
+    return get_db().execute('select count(token) from invites where added_by = ? and used = 0',
+                            [session.get('user_id')]).fetchone()[0]
 
 
 @bp.route('/invite/generate')
 @authentication.login_required
 def generate_invite() -> Response:
-    db = get_db()
-    cursor = db.execute('select count(token) from invites where added_by = ? and used = 0', [session.get('user_id')])
-    tokens = cursor.fetchall()[0][0]
-    if tokens < 3 or authentication.current_user_is_admin():
-        token = create_token(added_by=int(session.get('user_id')))
-    else:
-        return abort(403)
-    flash(Markup(f'Key <code style="user-select: all;">{token}</code> created.'), STYLE.message)
+    if not authentication.current_user_is_admin() \
+            and count_unused_invites() >= current_app.config['MAX_INVITE_TOKENS']:
+        abort(403)
+    token = create_token(added_by=int(session.get('user_id')))
+    flash(Markup('Key <code style="user-select: all;">{}</code> created.').format(token), STYLE.message)
     return redirect(url_for('invite.invite'))
 
 
@@ -50,5 +48,6 @@ def delete_invite(token) -> Response:
     db = get_db()
     db.execute('delete from invites where token = ? and added_by = ?', [token, session.get('user_id')])
     db.commit()
-    flash(Markup(f'Key <code>{token}</code> deleted.'), STYLE.message)
+    # the token comes from the url, so it must be escaped
+    flash(Markup('Key <code>{}</code> deleted.').format(token), STYLE.message)
     return redirect(url_for('invite.invite'))
