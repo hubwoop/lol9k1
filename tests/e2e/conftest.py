@@ -41,6 +41,8 @@ def _server_env(db_path: Path) -> dict:
         FLASK_APP='lol9k1',
         LOL9K1_DB_PATH=str(db_path),
         LOL9K1_SECRET_KEY='e2e-test-secret',
+        # Playwright's request API doesn't send Secure cookies over http
+        LOL9K1_SECURE_COOKIE='false',
         PYTHONUNBUFFERED='1',
     )
     return env
@@ -59,7 +61,7 @@ def run_flask_cli(db_path: Path, *args: str) -> str:
 @pytest.fixture(scope='session')
 def db_path(tmp_path_factory) -> Path:
     path = tmp_path_factory.mktemp('db') / 'lol9k1-e2e.db'
-    run_flask_cli(path, 'init-db')
+    run_flask_cli(path, 'db', 'upgrade')
     return path
 
 

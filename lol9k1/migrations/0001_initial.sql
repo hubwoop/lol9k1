@@ -1,4 +1,5 @@
-pragma foreign_keys = on;
+-- Schema as of 2018 (3bfda9b). Databases created before migrations existed
+-- are stamped with this or a later version instead of running it, see migrate.py.
 
 -- GAMES
 create table games (
@@ -51,7 +52,6 @@ create table invites
   token    text primary key  not null,
   used     integer default 0 not null,
   added_by integer           not null,
-  admin    integer default 0 not null,
   constraint invites_users_id_fk foreign key (added_by) references users (id)
 );
 create unique index invites_token_uindex

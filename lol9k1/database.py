@@ -11,6 +11,7 @@ from slugify import slugify
 from igdb_api_python.igdb import igdb
 from werkzeug.security import generate_password_hash
 
+from lol9k1 import migrate
 from lol9k1.auth.types import Token
 from lol9k1.utilities import generate_name, generate_token
 
@@ -33,15 +34,9 @@ def close_db(e=None):
         db.close()
 
 
-def init_db():
-    db = get_db()
-    with current_app.open_resource('schema.sql', mode='r') as f:
-        db.executescript(f.read())
-    db.commit()
-
-
 def init_app(app):
     app.teardown_appcontext(close_db)
+    app.cli.add_command(db_command)
     app.cli.add_command(init_db_command)
     app.cli.add_command(create_admin_command)
     app.cli.add_command(create_dummy_users)
@@ -65,18 +60,45 @@ def get_party_end_date() -> str:
         return ""
 
 
-@click.command('init-db')
-@with_appcontext
-def init_db_command() -> None:
+@click.group('db')
+def db_command() -> None:
     """
-    Initializes the SQLite database.
+    Manages the schema of the SQLite database.
 
-    Will create a new database if one does not exist.
     The path to the database can be specified via current_app.config['DATABASE']
     or the LOL9K1_DB_PATH environment variable.
     """
-    init_db()
-    click.echo('Initialized the database.')
+
+
+@db_command.command('upgrade')
+@with_appcontext
+def db_upgrade_command() -> None:
+    """Creates the database or migrates it to the latest version."""
+    try:
+        result = migrate.upgrade(current_app.config['DATABASE'], log=click.echo)
+    except (migrate.MigrationError, sqlite3.Error) as e:
+        raise click.ClickException(str(e))
+    if not result.ahead:
+        click.echo(f'Database is at version {result.to_version}'
+                   f'{"" if result.applied else " (up to date)"}.')
+
+
+@db_command.command('status')
+@with_appcontext
+def db_status_command() -> None:
+    """Shows the database version and pending migrations."""
+    version, pending = migrate.status(current_app.config['DATABASE'])
+    click.echo(f'Database is at version {version}.')
+    for migration in pending:
+        click.echo(f'Pending: {migration.path.name}')
+
+
+@click.command('init-db')
+@with_appcontext
+@click.pass_context
+def init_db_command(ctx: click.Context) -> None:
+    """Alias for `flask db upgrade`, safe to run on an existing database."""
+    ctx.invoke(db_upgrade_command)
 
 
 @click.command('create-admin-token')
