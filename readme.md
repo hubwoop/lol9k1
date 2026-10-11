@@ -46,6 +46,7 @@ and keeps the SQLite database at `/data/lol9k1.db`, so mount a volume there (see
 #### Optional
 - `LOL9K1_SECRET_KEY` - A secret key for the session. If not set, a random string will be used.
 - `LOL9K1_DB_PATH` - The path to the [SQLite database file](https://www.sqlite.org/fileformat.html).
+- `LOL9K1_SECURE_COOKIE` - Set this to `False` if lol9k1 is served over plain http (not in debug mode), else browsers don't send the session cookie. Defaults to `True`.
 - [Flask configuration](https://flask.palletsprojects.com/en/stable/config/#configuring-from-environment-variables)
 - Experimental: `LOL9K1_ENABLE_BRACKETS` - Set this to `True` (or `1`/`yes`) to enable brackets. Defaults to `False`.
 

@@ -59,6 +59,9 @@ def configure(app, test_config):
         SECRET_KEY=secret,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Strict',
+        # served behind TLS; the debug server and the e2e tests run on plain http
+        SESSION_COOKIE_SECURE=not get_debug_flag()
+        and os.environ.get('LOL9K1_SECURE_COOKIE', default='True').lower() in ('true', '1', 'yes'),
         ENABLE_BRACKETS=os.environ.get('LOL9K1_ENABLE_BRACKETS', default='False').lower() in ('true', '1', 'yes'),
     )
     if test_config is None:
