@@ -23,7 +23,7 @@ Organize your lan party!
 
 ## When deploying
 You might want to use the same 
-[`SECRET_KEY`](https://flask.palletsprojects.com/en/2.3.x/config/#SECRET_KEY) 
+[`SECRET_KEY`](https://flask.palletsprojects.com/en/stable/config/#SECRET_KEY) 
 every time you start lol9k1. 
 This is useful because it allows users to stay authenticated even when the 
 server is restarted within a session. 
@@ -38,8 +38,8 @@ a random string will be used.
 #### Optional
 - `LOL9K1_SECRET_KEY` - A secret key for the session. If not set, a random string will be used.
 - `LOL9K1_DB_PATH` - The path to the [SQLite database file](https://www.sqlite.org/fileformat.html).
-- [Flask configuration](https://flask.palletsprojects.com/en/2.3.x/config/#configuring-from-environment-variables)
-- Experimental: `LOL9K1_ENABLE_BRACKETS` - Set this to `True` to enable brackets. Defaults to `False`.
+- [Flask configuration](https://flask.palletsprojects.com/en/stable/config/#configuring-from-environment-variables)
+- Experimental: `LOL9K1_ENABLE_BRACKETS` - Set this to `True` (or `1`/`yes`) to enable brackets. Defaults to `False`.
 
 ## CLI commands
 - `flask init-db` - Initializes the database.

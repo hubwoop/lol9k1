@@ -325,6 +325,8 @@ def create_event() -> Response:
     result = handle_event_post(games_row[0])
     if result.response:
         flash(*result.response)
+    if not result.event:
+        return redirect(url_for('schedule.schedule'))
     return redirect(url_for('event.event', event_id=result.event.id))
 
 
