@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', function () {
     window.tourneySchedule = calendar;
 
     {% for event in tournaments %}
-    console.log(JSON.parse('{{ event|tojson }}'));
+    console.log({{ event|tojson }});
     {% endfor %}
 
     calendar.createEvents([
@@ -85,8 +85,8 @@ document.addEventListener('DOMContentLoaded', function () {
             id: '9001',
             title: 'Best LAN Ever',
             body: `powered by lol9k1`,
-            start: '{{ party_start|safe }}',
-            end: '{{ party_end|safe }}',
+            start: {{ party_start|tojson }},
+            end: {{ party_end|tojson }},
             category: 'allday',
             state: 'Free',
             isReadOnly: true,
@@ -101,11 +101,11 @@ document.addEventListener('DOMContentLoaded', function () {
         },
     {% for event in tournaments %}
         {
-            id: '{{ event['id']|safe }}',
-            title: '{{ event['game']|safe }} Tournament',
-            body: '<a href="{{ url_for('event.event', event_id=event['id']) }}">{{ event['game']|tojson|safe }}</a>',
-            start: '{{ event['start']|safe }}',
-            end: '{{ event['end']|safe }}',
+            id: {{ event['id']|string|tojson }},
+            title: {{ (event['game'] ~ ' Tournament')|tojson }},
+            body: {{ ('<a href="%s">%s</a>'|format(url_for('event.event', event_id=event['id']), event['game']|e))|tojson }},
+            start: {{ event['start']|tojson }},
+            end: {{ event['end']|tojson }},
             attendees: ['A', 'B', 'C'],
             category: 'time',
             state: 'Free',
