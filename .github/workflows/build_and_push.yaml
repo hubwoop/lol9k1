@@ -45,9 +45,9 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value={{branch}}-{{sha}}
+            type=raw,value={{branch}}-{{sha}},enable=${{ github.event_name != 'pull_request' }}
           flavor: |
-            latest=true
+            latest=${{ github.event_name != 'pull_request' }}
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -71,7 +71,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.docker_build.outputs.digest }}
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
