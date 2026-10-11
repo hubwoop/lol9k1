@@ -8,7 +8,7 @@ Organize your lan party!
 - `source lol9k1env/bin/activate`
 - `pip install -r lol9k1/requirements.txt`
 - `export FLASK_APP=lol9k1`
-- `flask init-db`
+- `flask db upgrade`
 - Generate an admin token for registration: `flask create-admin-token`
 - Start lol9k1: `flask run`
 
@@ -17,7 +17,7 @@ Organize your lan party!
 - `.\lol9k1env\Scripts\activate`
 - `pip install -r lol9k1\requirements.txt`
 - `$env:FLASK_APP="lol9k1"`
-- `flask init-db`
+- `flask db upgrade`
 - Generate an admin token for registration: `flask create-admin-token`
 - Start lol9k1: `flask run`
 
@@ -35,7 +35,7 @@ The image runs lol9k1 with [gunicorn](https://gunicorn.org/) on port `9001` as a
 and keeps the SQLite database at `/data/lol9k1.db`, so mount a volume there (see `docker-compose.yml`).
 
 - `docker compose up -d`
-- Initialize the database once: `docker compose exec web flask init-db`
+  (the container creates or migrates the database on every start)
 - Generate an admin token for registration: `docker compose exec web flask create-admin-token`
 
 ### Configuration via Environment Variables
@@ -50,9 +50,14 @@ and keeps the SQLite database at `/data/lol9k1.db`, so mount a volume there (see
 - Experimental: `LOL9K1_ENABLE_BRACKETS` - Set this to `True` (or `1`/`yes`) to enable brackets. Defaults to `False`.
 
 ## CLI commands
-- `flask init-db` - Initializes the database.
+- `flask db upgrade` - Creates the database or migrates it to the latest version.
+- `flask db status` - Shows the database version and pending migrations.
+- `flask init-db` - Alias for `flask db upgrade`.
 - `flask create-admin-token` - Creates an admin user invite token.
 - `flask create-dummy-users` - Creates dummy users.
+
+## Database migrations
+Schema changes are versioned migrations in `lol9k1/migrations/`, see [docs/migrations.md](docs/migrations.md).
 
 ## Testing
 End-to-end tests drive the app through a real browser with [Playwright](https://playwright.dev/python/).

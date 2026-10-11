@@ -30,7 +30,9 @@ ENV FLASK_APP=lol9k1 \
 
 EXPOSE 9001
 
+# migrate the database before serving, so a new image brings its schema along.
+# a failing migration is rolled back and keeps the container from starting.
 # a single worker process: without LOL9K1_SECRET_KEY each process would
 # generate its own random secret and sessions would not survive across workers
-CMD ["gunicorn", "--bind", "0.0.0.0:9001", "--workers", "1", "--threads", "4", \
-     "--access-logfile", "-", "lol9k1:create_app()"]
+CMD ["sh", "-c", "flask db upgrade && exec gunicorn --bind 0.0.0.0:9001 --workers 1 --threads 4 \
+     --access-logfile - 'lol9k1:create_app()'"]

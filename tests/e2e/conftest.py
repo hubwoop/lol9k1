@@ -59,7 +59,7 @@ def run_flask_cli(db_path: Path, *args: str) -> str:
 @pytest.fixture(scope='session')
 def db_path(tmp_path_factory) -> Path:
     path = tmp_path_factory.mktemp('db') / 'lol9k1-e2e.db'
-    run_flask_cli(path, 'init-db')
+    run_flask_cli(path, 'db', 'upgrade')
     return path
 
 
