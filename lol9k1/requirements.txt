@@ -1,6 +1,5 @@
 Flask>=3.0,<4
 python-slugify>=8.0.1
-igdb-api-python>=1.0
 python-dateutil>=2.9.0
 Markdown>=3.5
 flask_wtf>=1.1.1

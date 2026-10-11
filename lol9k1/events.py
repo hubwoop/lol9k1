@@ -1,7 +1,7 @@
 import json
 import random
 from collections import namedtuple
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Optional, NamedTuple, Tuple
 from urllib.parse import urlparse
 
@@ -13,8 +13,6 @@ from lol9k1.auth import auth
 from lol9k1.database import get_db, get_party_start_date, get_party_end_date
 from lol9k1.utilities import STYLE
 
-Schedule = namedtuple('prepared_schedule',
-                      ['fetch_date', 'formatted_events', 'event_creators'])
 Team = namedtuple('team', ['name', 'captain', 'players', 'team_id'])
 Participant = namedtuple('participant', ['user', 'team_name', 'team_id', 'captain'])
 Details = namedtuple('details',
@@ -280,34 +278,6 @@ def set_team_name_api(team_id):
     return json.dumps("yep :)!")
 
 
-@bp.route('/<int:event_id>/possible-captains')
-@auth.login_required
-def get_possible_captains_api(event_id):
-    db = get_db()
-    eligible_users = db.execute('''
-      select id, name, gender from users where id not in
-      (select user from tournament_participants where is_team_captain = 1 and tournament = ?)
-      ''', [event_id]).fetchall()
-    possible_captains = []
-    for row in eligible_users:
-        possible_captains.append(row[1])
-    return json.dumps(possible_captains)
-
-
-@bp.route('/<int:event_id>/captains')
-@auth.login_required
-def event_captains_api(event_id):
-    captains = get_captains_from_db(event_id)
-    return json.dumps([captain._asdict() for captain in captains])
-
-
-@bp.route('/<int:event_id>/participants')
-@auth.login_required
-def event_participants_api(event_id):
-    participants = get_participants(event_id)
-    return json.dumps(participants)
-
-
 @bp.route('/delete/<int:event_id>')
 @auth.login_required
 def delete_event(event_id) -> Response:
@@ -318,19 +288,6 @@ def delete_event(event_id) -> Response:
     else:
         flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return redirect(url_for('landing.landing'))
-
-
-def prepare_schedule(fetch_date=None) -> Optional[Schedule]:
-    end, start = get_party_start_and_end()
-    if not start or not end:
-        return None
-    if not fetch_date:
-        events = get_all()
-    else:
-        events = get_all_by_date(fetch_date)
-    event_creators = distinct_creators_as_string(events)
-    formatted_events = format_events(fetch_date, events)
-    return Schedule(fetch_date, formatted_events, event_creators)
 
 
 @bp.route('/create', methods=['POST'])
@@ -367,8 +324,6 @@ def parse_event_datetime(value: str) -> datetime:
 
 
 def handle_event_post(game_id) -> EventCreationResult:
-    if request.args.get('fetch_date', None):
-        return EventCreationResult((utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning), None)
     try:
         start = parse_event_datetime(request.form['start'])
         end = parse_event_datetime(request.form['end'])
@@ -409,17 +364,6 @@ def get_party_start_and_end() -> (Optional[datetime], Optional[datetime]):
     return end, start
 
 
-def get_surrounding_dates_if_possible(end, fetch_date, start) -> (datetime, datetime):
-    next_party_day, previous_party_day = None, None
-    previous_day = (fetch_date - timedelta(days=1)).date()
-    next_day = (fetch_date + timedelta(days=1)).date()
-    if next_day <= end.date():
-        next_party_day = next_day.isoformat()
-    if previous_day >= start.date():
-        previous_party_day = previous_day.isoformat()
-    return next_party_day, previous_party_day
-
-
 def mode_to_string(mode) -> str:
     try:
         return utilities.MODE_INT_TO_STRING.get(int(mode), 'Unknown')
@@ -434,7 +378,7 @@ def normalise_stored_datetime(value) -> Optional[str]:
         return None
 
 
-def format_events(fetch_date, events) -> List[dict]:
+def format_events(events) -> List[dict]:
     formatted_events = []
     for row in events:
         event_id = row[0]
@@ -454,19 +398,6 @@ def format_events(fetch_date, events) -> List[dict]:
     return formatted_events
 
 
-def get_all_by_date(fetch_date: datetime) -> List[tuple]:
-    tournaments = get_db().execute('''
-      select t.id, games.name, t.start_datetime, t.end_datetime, users.name, t.mode, t.state 
-      from events t 
-        join games on t.game = games.id 
-        join users on t.created_by = users.id
-      where date(start_datetime) = date(?) 
-        or date(end_datetime) = date(?) 
-        or (date(start_datetime) < date(?) and date(end_datetime) > date(?))
-      ''', (fetch_date, fetch_date, fetch_date, fetch_date)).fetchall()
-    return tournaments
-
-
 def get_all() -> List[tuple]:
     events = get_db().execute('''
       select t.id, games.name, t.start_datetime, t.end_datetime, users.name, t.mode, t.state 
@@ -475,14 +406,6 @@ def get_all() -> List[tuple]:
         join users on t.created_by = users.id
       ''').fetchall()
     return events
-
-
-def distinct_creators_as_string(events: List[tuple]) -> str:
-    tournament_creators = set()
-    for row in events:
-        tournament_creators.add(f"'{row[4]}'")
-    tournament_creators = ', '.join(tournament_creators)
-    return tournament_creators
 
 
 def get_all_by_game(game_id):

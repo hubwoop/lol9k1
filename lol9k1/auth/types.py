@@ -16,7 +16,3 @@ class User(NamedTuple):
     gender: str
     is_admin: int
     token_used: str
-
-
-class RegistrationError(Exception):
-    pass

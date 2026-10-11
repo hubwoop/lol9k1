@@ -10,7 +10,6 @@ services:
       - LETSENCRYPT_EMAIL=user@a.domain.org
       - LETSENCRYPT_TEST=false
       - LOL9K1_SECRET_KEY=change_me_to_a_long_random_string
-      - LOL9K1_IGDB_API_KEY=a_key
     container_name: lol9k1
     restart: unless-stopped
     networks:

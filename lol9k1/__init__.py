@@ -54,7 +54,6 @@ def configure(app, test_config):
         secret = os.environ.get('LOL9K1_SECRET_KEY', default=os.urandom(24))
     app.config.from_mapping(
         DATABASE=db_path,
-        IGDB_API_KEY=os.environ.get('LOL9K1_IGDB_API_KEY', default=None),
         MAX_INVITE_TOKENS=3,
         SECRET_KEY=secret,
         SESSION_COOKIE_HTTPONLY=True,

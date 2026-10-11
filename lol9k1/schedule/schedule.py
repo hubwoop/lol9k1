@@ -1,28 +1,20 @@
-from flask import (
-    Blueprint, render_template
-)
+from flask import Blueprint, render_template
 
-import lol9k1.game as game
-import lol9k1.database
-from lol9k1 import events
+from lol9k1 import events, game
 from lol9k1.auth import auth
-
+from lol9k1.database import get_party_end_date, get_party_start_date
 
 bp = Blueprint('schedule', __name__, url_prefix='/schedule', template_folder='templates')
 
 
-@bp.route('/', methods=['GET', 'POST'])
+@bp.route('/')
 @auth.login_required
 def schedule() -> str:
-    prepared_schedule = events.prepare_schedule()
-    game_rows = game.get_all()
-    if not prepared_schedule:
+    end, start = events.get_party_start_and_end()
+    if not start or not end:
         return "The administrators have yet to set a date for this LAN."
     return render_template('schedule/schedule.html',
-                           creators=prepared_schedule.event_creators,
-                           tournaments=prepared_schedule.formatted_events,
-                           party_start=lol9k1.database.get_party_start_date(),
-                           party_end=lol9k1.database.get_party_end_date(),
-                           fetched_date=prepared_schedule.fetch_date,
-                           games=game_rows)
-
+                           tournaments=events.format_events(events.get_all()),
+                           party_start=get_party_start_date(),
+                           party_end=get_party_end_date(),
+                           games=game.get_all())
