@@ -136,3 +136,5 @@ yarn-error.log*
 
 # CUSTOM
 run.bat
+# e2e test output
+test-results/

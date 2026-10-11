@@ -1,0 +1,3 @@
+-r lol9k1/requirements.txt
+pytest>=8
+pytest-playwright>=0.5

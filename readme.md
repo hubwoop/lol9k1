@@ -46,6 +46,17 @@ a random string will be used.
 - `flask create-admin-token` - Creates an admin user invite token.
 - `flask create-dummy-users` - Creates dummy users.
 
+## Testing
+End-to-end tests drive the app through a real browser with [Playwright](https://playwright.dev/python/).
+Each test run starts its own `flask run` server against a temporary database.
+
+- `pip install -r requirements-test.txt`
+- `python -m playwright install --with-deps chromium`
+- `pytest` (add `--headed` to watch the browser)
+
+The tests run on every pull request via the `e2e` GitHub Actions workflow.
+To use an already installed Chromium instead, point `PLAYWRIGHT_CHROMIUM_EXECUTABLE` at its binary.
+
 ## Built With
 
 * [Flask](http://flask.pocoo.org) - A microframework for Python based on Werkzeug, Jinja 2 and good intentions

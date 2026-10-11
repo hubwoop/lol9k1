@@ -325,6 +325,8 @@ def create_event() -> Response:
     result = handle_event_post(games_row[0])
     if result.response:
         flash(*result.response)
+    if not result.event:
+        return redirect(url_for('schedule.schedule', _anchor='eventCreationForm'))
     return redirect(url_for('event.event', event_id=result.event.id))
 
 
@@ -484,13 +486,15 @@ def get_all_participants_for(event_id):
     return participants_rows
 
 
-def get_details(event_id) -> Details:
+def get_details(event_id) -> Optional[Details]:
     row = get_db().execute('''
       select u.name, e.created_by, e.game, g.name, g.slug, e.mode, e.state, e.description, e.external_url from events e 
         join users u on e.created_by = u.id
         join games g on e.game = g.id
       where e.id = ?
     ''', [event_id]).fetchone()
+    if row is None:
+        return None
     event_details = Details(*row)
     return event_details
 
