@@ -30,6 +30,14 @@ server is restarted within a session.
 To do this pass a good secret via env var `LOL9K1_SECRET_KEY`. If not set, 
 a random string will be used.
 
+### With Docker
+The image runs lol9k1 with [gunicorn](https://gunicorn.org/) on port `9001` as an unprivileged user
+and keeps the SQLite database at `/data/lol9k1.db`, so mount a volume there (see `docker-compose.yml`).
+
+- `docker compose up -d`
+- Initialize the database once: `docker compose exec web flask init-db`
+- Generate an admin token for registration: `docker compose exec web flask create-admin-token`
+
 ### Configuration via Environment Variables
 
 #### Required
