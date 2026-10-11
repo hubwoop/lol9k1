@@ -1,5 +1,6 @@
 import os
 from flask import Flask
+from flask.helpers import get_debug_flag
 
 
 def create_app(test_config=None):
@@ -47,7 +48,7 @@ def configure(app, test_config):
         'LOL9K1_DB_PATH',
         os.path.join(app.root_path, 'lol9k1.db')
     )
-    if bool(os.environ.get('FLASK_DEBUG', default=False)):
+    if get_debug_flag():
         secret = 'debugging'
     else:
         secret = os.environ.get('LOL9K1_SECRET_KEY', default=os.urandom(24))

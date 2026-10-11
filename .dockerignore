@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+docs
+tests
+test-results
+**/__pycache__
+**/*.py[cod]
+**/*.db
+**/instance
