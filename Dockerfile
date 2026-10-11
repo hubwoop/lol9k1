@@ -19,7 +19,6 @@ RUN pip install -r /app/requirements.txt 'gunicorn>=23,<24'
 
 COPY lol9k1 /app/lol9k1
 
-# run unprivileged; the SQLite database lives on the /data volume
 RUN useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin lol9k1 \
     && mkdir /data \
     && chown lol9k1:lol9k1 /data
