@@ -62,13 +62,17 @@ Schema changes are versioned migrations in `lol9k1/migrations/`, see [docs/migra
 
 ## Testing
 End-to-end tests drive the app through a real browser with [Playwright](https://playwright.dev/python/).
-Each test run starts its own `flask run` server against a temporary database.
+Each test run starts its own `flask run` server on a free port against a temporary database.
 
-- `pip install -r requirements-test.txt`
+- `pip install -r requirements-test.txt -c constraints-test.txt`
 - `python -m playwright install --with-deps chromium`
 - `pytest` (add `--headed` to watch the browser)
 
-The tests run on every pull request via the `e2e` GitHub Actions workflow.
+The migration tests don't need Playwright: with only `lol9k1/requirements.txt` and `pytest` installed,
+run `pytest tests/test_migrations.py`.
+
+The tests run on every pull request via the `e2e` GitHub Actions workflow, which installs the exact
+versions from `constraints-test.txt`. Regenerate that file when the requirements change (see its header).
 To use an already installed Chromium instead, point `PLAYWRIGHT_CHROMIUM_EXECUTABLE` at its binary.
 
 ## Built With

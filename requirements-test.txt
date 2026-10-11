@@ -1,3 +1,6 @@
 -r lol9k1/requirements.txt
-pytest>=8
-pytest-playwright>=0.5
+# Test tooling is pinned exactly. CI additionally installs with
+# `-c constraints-test.txt`, which pins every transitive dependency too.
+pytest==9.1.1
+pytest-playwright==0.10.0
+playwright==1.63.0
