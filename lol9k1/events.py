@@ -3,6 +3,7 @@ import random
 from collections import namedtuple
 from datetime import datetime, timedelta
 from typing import List, Optional, NamedTuple, Tuple
+from urllib.parse import urlparse
 
 import dateutil.parser
 from flask import session, Blueprint, request, redirect, url_for, flash, render_template, Response, abort, current_app
@@ -43,6 +44,8 @@ class EventCreationResult(NamedTuple):
     event: Optional[Event]
 
 
+MAX_TEAM_NAME_LENGTH = 50
+
 bp = Blueprint('event', __name__, url_prefix='/event')
 
 
@@ -62,10 +65,16 @@ def event(event_id):
                                event=event_details,
                                user_id=session.get('user_id'))
     if request.method == 'POST':
+        if not user_may_manage(event_details.creator_id):
+            flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
+            return redirect(url_for('.event', event_id=event_id))
         handle_url_post(event_id)
         handle_description_post(event_id)
         handle_captains_post(event_id)
         event_details = get_details(event_id)
+        if not event_details:
+            flash("The selected event does not exist (anymore).", STYLE.error)
+            return redirect(url_for('landing.landing'))
     participants_rows = get_all_participants_for(event_id)
     teams = build_teams(participants_rows)
     if request.method == 'POST' and 'initiate-picking' in request.form:
@@ -106,8 +115,22 @@ def handle_url_post(event_id):
         url = request.form['external_url']
     except KeyError:
         url = None
-    if url:
-        update_url(event_id, url)
+    url = url.strip() if url else None
+    if not url:
+        return
+    if not is_http_url(url):
+        flash('The bracket URL must start with http:// or https://.', STYLE.warning)
+        return
+    update_url(event_id, url)
+
+
+def is_http_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return parsed.scheme in ('http', 'https') and bool(parsed.netloc)
+
+
+def user_may_manage(creator_id) -> bool:
+    return auth.current_user_is_admin() or session.get('user_id') == creator_id
 
 
 def handle_description_post(event_id):
@@ -131,7 +154,8 @@ def handle_captains_post(event_id):
 @bp.route('/<int:event_id>/stop-pick-phase', methods=['GET'])
 @auth.login_required
 def stop_pick_phase(event_id):
-    if get_state(event_id) == 'pickphase' and session.get('user_id') == get_creator_of(event_id):
+    creator = get_creator_or_404(event_id)
+    if get_state(event_id) == 'pickphase' and user_may_manage(creator):
         end_pick_state_in_db(event_id)
     return redirect(url_for('.event', event_id=event_id))
 
@@ -150,6 +174,7 @@ def get_teams_user_is_captain_of(event_id):
 @bp.route('/<int:event_id>/state')
 @auth.login_required
 def get_state_api(event_id):
+    get_creator_or_404(event_id)
     teams = get_teams_for_json(event_id)
     pick_details = get_pick_details(event_id)
     state = get_state(event_id)
@@ -171,10 +196,19 @@ def get_possible_teammates_api(event_id):
 @bp.route('/<int:event_id>/team/<int:team_id>/add-mate', methods=['POST'])
 @auth.login_required
 def add_teammate_api(event_id, team_id):
+    get_creator_or_404(event_id)
+    if get_captain(team_id) is None:
+        abort(404)
+    body = request.get_json(silent=True)
+    try:
+        if isinstance(body, bool):
+            raise TypeError
+        requested_user = int(body)
+    except (TypeError, ValueError):
+        abort(400)
     db = get_db()
     currently_picking_team = get_currently_picking(event_id)
     event_state = get_state(event_id)
-    requested_user = int(request.json)
     possible_users = get_possible_teammates_for(event_id)
     possible_users = [user[0] for user in possible_users]
     if session.get('user_id') != get_captain(currently_picking_team) \
@@ -184,7 +218,7 @@ def add_teammate_api(event_id, team_id):
         return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
     # add requested user to requesting team
     db.execute('''insert into tournament_participants (user, tournament, team) values (?, ? ,?)''',
-               (int(request.json), event_id, team_id))
+               (requested_user, event_id, team_id))
     db.commit()
     skips = get_skips(event_id)
     if skips > 0:
@@ -204,6 +238,9 @@ def advance_currently_picking(event_id, currently_picking_team):
 @bp.route('/<int:event_id>/team/<int:team_id>/skip', methods=['POST'])
 @auth.login_required
 def skip_picking_teammate_api(event_id, team_id):
+    get_creator_or_404(event_id)
+    if get_captain(team_id) is None:
+        abort(404)
     currently_picking_team = get_currently_picking(event_id)
     event_state = get_state(event_id)
     if not user_allowed_to_skip(event_id, currently_picking_team, team_id, event_state):
@@ -228,14 +265,16 @@ def user_allowed_to_skip(event_id, currently_picking_team, team_id, event_state)
 @bp.route('/team/<int:team_id>/name', methods=['POST'])
 @auth.login_required
 def set_team_name_api(team_id):
-    try:
-        captain = get_captain(team_id)
-    except KeyError:
-        return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
+    captain = get_captain(team_id)
+    if captain is None:
+        abort(404)
     if not auth.current_user_is_admin() and int(session.get('user_id')) != int(captain):
         return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
-    new_name = request.json
-    if not type(new_name) == str:
+    new_name = request.get_json(silent=True)
+    if not isinstance(new_name, str):
+        abort(400)
+    new_name = new_name.strip()
+    if not new_name or len(new_name) > MAX_TEAM_NAME_LENGTH:
         return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
     set_team_name(team_id, new_name)
     return json.dumps("yep :)!")
@@ -255,37 +294,24 @@ def get_possible_captains_api(event_id):
     return json.dumps(possible_captains)
 
 
-@bp.route('/<int:event_id>/captains', methods=['GET', 'DELETE', 'UPDATE', 'POST'])
+@bp.route('/<int:event_id>/captains')
 @auth.login_required
 def event_captains_api(event_id):
-    if request.method == 'GET':
-        captains = get_captains_from_db(event_id)
-        return json.dumps([captain._asdict() for captain in captains])
-    elif request.method == 'POST':
-        return add_captains(request.json())
-    elif request.method == 'DELETE':
-        return delete_captains(request.json(), event_id)
-    else:
-        return utilities.DFAULT_REFUSAL_MESSAGE
+    captains = get_captains_from_db(event_id)
+    return json.dumps([captain._asdict() for captain in captains])
 
 
-@bp.route('/<int:event_id>/participants', methods=['GET', 'UPDATE'])
+@bp.route('/<int:event_id>/participants')
 @auth.login_required
 def event_participants_api(event_id):
-    if request.method == 'GET':
-        participants = get_participants(event_id)
-        return json.dumps(participants)
-    elif request.method == 'UPDATE':
-        participants = update_participants(request.json())
-        return json.dumps(participants)
-    else:
-        return utilities.DFAULT_REFUSAL_MESSAGE
+    participants = get_participants(event_id)
+    return json.dumps(participants)
 
 
 @bp.route('/delete/<int:event_id>')
 @auth.login_required
 def delete_event(event_id) -> Response:
-    if auth.current_user_is_admin() or get_creator_of(event_id) == session.get('user_id'):
+    if user_may_manage(get_creator_or_404(event_id)):
         game = delete_with_all_dependencies_in_database(event_id)
         flash(f"Deleted event {event_id}.", STYLE.message)
         return redirect(url_for('game.game_detail', game=game))
@@ -450,7 +476,7 @@ def build_teams(participants_rows):
 
 
 def get_teams_for_json(event_id: int) -> List[dict]:
-    teams = get_participants(event_id)
+    teams = get_participants(event_id) or {}
     teams_for_json = []
     for value in teams.values():
         teams_for_json.append(value._asdict())
@@ -461,7 +487,8 @@ def get_pick_details(event_id: int):
     db = get_db()
     pick_details = db.execute('''select pick_order, currently_picking from events where id = ?''',
                               [event_id]).fetchone()
-    return PickDetails(pick_order=json.loads(pick_details[0]), currently_picking=pick_details[1])
+    pick_order = json.loads(pick_details[0]) if pick_details[0] else []
+    return PickDetails(pick_order=pick_order, currently_picking=pick_details[1])
 
 
 def initialize_pick_phase(event_id: int):
@@ -513,7 +540,14 @@ def delete_with_all_dependencies_in_database(event_id):
 
 def get_creator_of(event_id):
     db = get_db()
-    creator = db.execute('''select created_by from events where id = ?''', [event_id]).fetchone()[0]
+    row = db.execute('''select created_by from events where id = ?''', [event_id]).fetchone()
+    return row[0] if row else None
+
+
+def get_creator_or_404(event_id):
+    creator = get_creator_of(event_id)
+    if creator is None:
+        abort(404)
     return creator
 
 
@@ -531,40 +565,10 @@ def get_captains_from_db(event_id: int):
     return captains
 
 
-def add_captains(captains: str):
-    return None
-
-
-def delete_captains(captains: str, tournament: int):
-    if valid_captains_json(captains):
-        captains = json.loads(captains)
-        for captain in captains:
-            db = get_db()
-            db.execute('''
-              delete from tournament_participants where tournament = ? and user = ? and is_team_captain = 1
-            ''', (tournament, captain))
-    else:
-        return utilities.DFAULT_REFUSAL_MESSAGE
-
-
-def valid_captains_json(captains: str) -> bool:
-    try:
-        captains = json.loads(captains)
-    except json.JSONDecodeError:
-        return False
-    if type(captains) is not List:
-        return False
-    return True
-
-
 def get_participants(event_id):
     participants_rows = get_all_participants_for(event_id)
     teams = build_teams(participants_rows)
     return teams
-
-
-def update_participants(param):
-    return None
 
 
 def update_captains(event_id, captains):
@@ -616,7 +620,8 @@ def get_currently_picking(event_id):
 
 def get_captain(team_id):
     db = get_db()
-    return db.execute('select captain from teams where id = ?', [team_id]).fetchone()[0]
+    row = db.execute('select captain from teams where id = ?', [team_id]).fetchone()
+    return row[0] if row else None
 
 
 def get_possible_teammates_for(event_id):
