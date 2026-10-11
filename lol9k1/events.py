@@ -326,7 +326,7 @@ def create_event() -> Response:
     if result.response:
         flash(*result.response)
     if not result.event:
-        return redirect(url_for('schedule.schedule', _anchor='eventCreationForm'))
+        return redirect(url_for('schedule.schedule'))
     return redirect(url_for('event.event', event_id=result.event.id))
 
 

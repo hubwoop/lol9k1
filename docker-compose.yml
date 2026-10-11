@@ -12,7 +12,7 @@ services:
       - LETSENCRYPT_HOST=a.domain.org
       - LETSENCRYPT_EMAIL=user@a.domain.org
       - LETSENCRYPT_TEST=false
-      - IGDB_API_KEY=a_key
+      - LOL9K1_IGDB_API_KEY=a_key
     command: flask run --host=0.0.0.0 --port=80
     container_name: lol9k1
     networks:
