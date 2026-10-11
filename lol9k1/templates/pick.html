@@ -35,10 +35,11 @@
       const event_id = {{ event_id|safe }};
       let names_beeing_edited = [];
       let leading = [];
-      fetch_teams_user_is_captain_of();
-
-      refresh_view();
-      setInterval(refresh_view, 500);
+      // the view depends on the teams this user leads, so only start rendering once they are known
+      fetch_teams_user_is_captain_of().then(function () {
+          refresh_view();
+          setInterval(refresh_view, 500);
+      });
 
       function refresh_view() {
           update_possible_teammates();
@@ -281,7 +282,7 @@
       }
 
       function update_team_name(team_id, new_team_name) {
-          fetch(`/team/${team_id}/name`, {
+          fetch(`/event/team/${team_id}/name`, {
               method: 'POST',
               body: JSON.stringify(new_team_name),
               headers: new Headers({
@@ -294,7 +295,7 @@
       }
 
       function fetch_teams_user_is_captain_of() {
-          fetch(`/event/${event_id}/captain-of`, {
+          return fetch(`/event/${event_id}/captain-of`, {
               method: 'POST',
               headers: new Headers({
                   'Content-Type': 'application/json'
