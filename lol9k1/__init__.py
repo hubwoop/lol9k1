@@ -48,7 +48,6 @@ def configure(app, test_config):
         'LOL9K1_DB_PATH',
         os.path.join(app.root_path, 'lol9k1.db')
     )
-    # get_debug_flag() treats FLASK_DEBUG=0/false/no as off; a plain bool() of the string would not
     if get_debug_flag():
         secret = 'debugging'
     else:
