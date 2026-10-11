@@ -99,3 +99,13 @@ def test_regular_user_cannot_see_remove_link(page: Page, seed, alice):
 
     expect(game_row(page, 'Counter-Strike 1.6')).to_be_visible()
     expect(page.get_by_role('link', name='Remove')).to_have_count(0)
+
+
+def test_regular_user_cannot_delete_game_via_url(page: Page, seed, alice):
+    game_id = seed.game('Counter-Strike 1.6', added_by=alice)
+    login(page, alice)
+
+    response = page.goto(f'/delete/game/{game_id}')
+
+    assert response.status == 403
+    assert [r['name'] for r in seed.query('select name from games')] == ['Counter-Strike 1.6']

@@ -105,6 +105,7 @@ def game_vote(game, vote) -> Response:
 
 @bp.route('/delete/game/<int:game_id>')
 @auth.login_required
+@auth.admin_required
 def delete_game(game_id: int) -> Response:
     db = get_db()
     game = db.execute('select name from games where id = ?', [game_id]).fetchone()[0]
