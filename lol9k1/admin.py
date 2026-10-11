@@ -1,4 +1,4 @@
-import dateutil
+from dateutil import parser as date_parser
 from flask import (Blueprint, render_template, request, flash)
 from markupsafe import Markup
 
@@ -37,8 +37,8 @@ def store_form() -> None:
 
 
 def valid_date_received():
-    start_date = dateutil.parser.parse(request.form['date_start'])
-    end_date = dateutil.parser.parse(request.form['date_end'])
+    start_date = date_parser.parse(request.form['date_start'])
+    end_date = date_parser.parse(request.form['date_end'])
     if start_date >= end_date:
         flash(Markup(INVALID_DATES), STYLE.error)
         return False
