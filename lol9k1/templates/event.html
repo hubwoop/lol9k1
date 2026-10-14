@@ -43,6 +43,57 @@
     </div>
   </div>
 
+  {# ---------------------------- BRACKET ----------------------------------------------------------------------------- #}
+  {% if enable_brackets and (has_bracket or (may_manage and teams)) %}
+    <hr>
+    <div class="row" id="bracket">
+      <div class="col">
+        <h3>Bracket</h3>
+        {% if may_manage %}
+          {% if event.tournament_mode|string != '1' %}
+            <p class="text-muted">Built-in brackets only support single elimination so far.</p>
+          {% elif not has_bracket %}
+            <p>Draw a single elimination bracket from the teams. Captains then enter the results of their matches.</p>
+            <form action="{{ url_for('bracket.manage_bracket', event_id=event_id) }}" method="post">
+              <input type="hidden" name="action" value="create">
+              <button type="submit" class="btn btn-primary">Draw bracket</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if has_bracket %}
+          <p id="bracket-champion" class="lead" hidden></p>
+          <div id="bracket-container"></div>
+          <h4>Matches</h4>
+          <div id="bracket-error" class="alert alert-warning" role="alert" hidden></div>
+          <table class="table table-sm" id="bracket-matches">
+            <thead>
+            <tr>
+              <th scope="col">Round</th>
+              <th scope="col">Team</th>
+              <th scope="col" colspan="3" class="text-center">Score</th>
+              <th scope="col">Team</th>
+              <th scope="col"></th>
+            </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          {% if may_manage %}
+            <form action="{{ url_for('bracket.manage_bracket', event_id=event_id) }}" method="post" class="d-inline"
+                  onsubmit="return confirm('Draw a new bracket? All results will be lost.')">
+              <input type="hidden" name="action" value="create">
+              <button type="submit" class="btn btn-outline-secondary btn-sm">Redraw bracket</button>
+            </form>
+            <form action="{{ url_for('bracket.manage_bracket', event_id=event_id) }}" method="post" class="d-inline"
+                  onsubmit="return confirm('Delete the bracket and all its results?')">
+              <input type="hidden" name="action" value="delete">
+              <button type="submit" class="btn btn-outline-danger btn-sm">Delete bracket</button>
+            </form>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
   {# ---------------------------- EDIT EVENT -------------------------------------------------------------------------- #}
   {% if session.get('user_id') == event.creator_id or session.get('is_admin', False) %}
     <hr>
@@ -90,6 +141,9 @@
             ¯\_(ツ)_/¯
           </div>
         {% endif %}
+        {% if has_bracket %}
+          <div class="alert alert-warning" role="alert">Changing team captains deletes the bracket.</div>
+        {% endif %}
         <form action="{{ url_for('event.event', event_id=event_id) }}" method="post">
           {% for user in users %}
             <div class="form-check">
@@ -118,35 +172,6 @@
         </div>
       {% endif %}
     </div>
-    {% if teams and enable_brackets %}
-      <hr>
-      <div class="row">
-        <div class="col">
-          <h3>Bracket</h3>
-          <div id="bracket-container"></div>
-          <script>
-            document.addEventListener('DOMContentLoaded', function () {
-              const minimalData = {
-                teams: [
-                  ["Team 1", "Team 2"], /* first matchup */
-                  ["Team 3", "Team 4"]  /* second matchup */
-                ],
-                results: [
-                  [[1, 2], [3, 4]],       /* first round */
-                  [[4, 6], [2, 1]]        /* second round */
-                ]
-              }
-
-              $(function () {
-                $('#bracket-container').bracket({
-                  init: minimalData /* data to initialize the bracket with */
-                })
-              })
-            })
-          </script>
-        </div>
-      </div>
-    {% endif %}
     <hr>
     <script>
       let clicked = 0;
@@ -168,11 +193,11 @@
   {% endif %}
 
 {% endblock %}
-{% if teams and enable_brackets %}
 {% block endofbody %}
   {{ super() }}
-  <script src="https://code.jquery.com/jquery-3.7.0.slim.min.js" integrity="sha256-tG5mcZUtJsZvyKAxYLVXrmjKBVLd6VpVccqz/r4ypFE=" crossorigin="anonymous"></script>
-  <script type="text/javascript" src="{{ url_for('static', filename='js/jquery.bracket.min.js' ) }}"></script>
-  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/jquery.bracket.min.css' ) }}" />
+  {% if enable_brackets and has_bracket %}
+    <script src="{{ url_for('static', filename='js/jquery.bracket.min.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/jquery.bracket.min.css') }}">
+    {% include 'bracket-js.html' %}
+  {% endif %}
 {% endblock %}
-{% endif %}

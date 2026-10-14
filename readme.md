@@ -48,7 +48,10 @@ and keeps the SQLite database at `/data/lol9k1.db`, so mount a volume there (see
 - `LOL9K1_DB_PATH` - The path to the [SQLite database file](https://www.sqlite.org/fileformat.html).
 - `LOL9K1_SECURE_COOKIE` - Set this to `False` if lol9k1 is served over plain http (not in debug mode), else browsers don't send the session cookie. Defaults to `True`.
 - [Flask configuration](https://flask.palletsprojects.com/en/stable/config/#configuring-from-environment-variables)
-- Experimental: `LOL9K1_ENABLE_BRACKETS` - Set this to `True` (or `1`/`yes`) to enable brackets. Defaults to `False`.
+- Experimental: `LOL9K1_ENABLE_BRACKETS` - Set this to `True` (or `1`/`yes`) to enable brackets. Defaults to `False` When enabled,
+  the creator of a single elimination event can draw a bracket from its teams on the event page.
+  Team captains enter the results of their matches, the creator and admins can enter or correct any result,
+  and the bracket updates itself for everyone watching it.
 
 ## CLI commands
 - `flask db upgrade` - Creates the database or migrates it to the latest version.

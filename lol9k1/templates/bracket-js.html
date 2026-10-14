@@ -1,0 +1,152 @@
+<script>
+  (function () {
+    const bracketUrl = {{ url_for('bracket.bracket_api', event_id=event_id)|tojson }};
+    const eventUrl = {{ url_for('event.event', event_id=event_id)|tojson }};
+    const REFRESH_INTERVAL = 5000;
+    const matchesBody = document.querySelector('#bracket-matches tbody');
+    const errorBox = document.getElementById('bracket-error');
+    let renderedJson = null;
+
+    // jquery.bracket appends team names as HTML, so render them as text
+    const decorator = {
+      edit: function () {
+      },
+      render: function (container, name, score, state) {
+        if (state === 'empty-bye') {
+          container.text('BYE');
+        } else if (state === 'empty-tbd') {
+          container.text('TBD');
+        } else {
+          container.text(name);
+        }
+      }
+    };
+
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.hidden = !message;
+    }
+
+    function cell(row, text, className) {
+      const td = row.insertCell();
+      td.textContent = text;
+      if (className) {
+        td.className = className;
+      }
+      return td;
+    }
+
+    function teamCell(row, team, winner) {
+      cell(row, team ? team.name : 'TBD', team && team.id === winner ? 'font-weight-bold' : '');
+    }
+
+    function scoreInput(team, score) {
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = '0';
+      input.className = 'form-control form-control-sm';
+      input.style.width = '5em';
+      input.setAttribute('aria-label', `Score of ${team.name}`);
+      input.value = score === null ? '' : score;
+      return input;
+    }
+
+    function button(text, className, onClick) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `btn btn-sm ${className} mr-1`;
+      b.textContent = text;
+      b.addEventListener('click', onClick);
+      return b;
+    }
+
+    function renderMatch(match) {
+      const row = matchesBody.insertRow();
+      row.dataset.matchId = match.id;
+      cell(row, match.round);
+      teamCell(row, match.team1, match.winner);
+      if (match.editable) {
+        const input1 = scoreInput(match.team1, match.score1);
+        const input2 = scoreInput(match.team2, match.score2);
+        row.insertCell().appendChild(input1);
+        cell(row, ':');
+        row.insertCell().appendChild(input2);
+        teamCell(row, match.team2, match.winner);
+        const actions = row.insertCell();
+        actions.appendChild(button('Save', 'btn-primary', function () {
+          if (input1.value === '' || input2.value === '') {
+            showError('Enter the scores of both teams.');
+            return;
+          }
+          postScore(match.id, Number(input1.value), Number(input2.value));
+        }));
+        if (match.score1 !== null) {
+          actions.appendChild(button('Clear', 'btn-outline-secondary', function () {
+            postScore(match.id, null, null);
+          }));
+        }
+      } else {
+        cell(row, match.score1 === null ? '–' : match.score1, 'text-right');
+        cell(row, ':', 'text-center');
+        cell(row, match.score2 === null ? '–' : match.score2);
+        teamCell(row, match.team2, match.winner);
+        row.insertCell();
+      }
+    }
+
+    function render(data, force) {
+      if (!data.exists) {
+        // the bracket was deleted in the meantime
+        window.location.reload();
+        return;
+      }
+      const json = JSON.stringify(data);
+      // don't throw away scores that are being typed in
+      const typing = document.activeElement.tagName === 'INPUT' && matchesBody.contains(document.activeElement);
+      if (json === renderedJson || (!force && typing)) {
+        return;
+      }
+      renderedJson = json;
+      $('#bracket-container').empty().bracket({
+        init: {teams: data.teams, results: data.results},
+        skipConsolationRound: true,
+        teamWidth: 150,
+        decorator: decorator
+      });
+      const champion = document.getElementById('bracket-champion');
+      champion.textContent = data.champion ? `🏆 ${data.champion} won the tournament!` : '';
+      champion.hidden = !data.champion;
+      matchesBody.replaceChildren();
+      data.matches.forEach(renderMatch);
+    }
+
+    function refresh() {
+      fetch(bracketUrl, {credentials: 'same-origin'})
+        .then(response => response.ok ? response.json() : Promise.reject(response))
+        .then(data => render(data, false))
+        .catch(() => {
+          // try again on the next refresh
+        });
+    }
+
+    function postScore(matchId, score1, score2) {
+      fetch(`${eventUrl}/match/${matchId}/score`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({score1: score1, score2: score2})
+      }).then(response => response.json().catch(() => ({})).then(body => {
+        if (!response.ok) {
+          showError(body.error || `Saving the result failed (${response.status}).`);
+          refresh();
+          return;
+        }
+        showError('');
+        render(body, true);
+      })).catch(() => showError('Saving the result failed, please try again.'));
+    }
+
+    refresh();
+    setInterval(refresh, REFRESH_INTERVAL);
+  })();
+</script>
