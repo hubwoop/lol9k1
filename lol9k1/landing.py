@@ -111,6 +111,7 @@ def delete_game(game_id: int) -> Response:
     game = db.execute('select name from games where id = ?', [game_id]).fetchone()[0]
     try:
         db.execute('delete from votes where game = ?', [game_id])
+        db.execute('delete from event_results where event in (select id from events where game = ?)', [game_id])
         db.execute('delete from events where game = ?', [game_id])
         db.execute('delete from games where id = ?', [game_id])
         db.commit()

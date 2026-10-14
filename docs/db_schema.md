@@ -5,6 +5,11 @@ class config {
    text value
    text key
 }
+class event_results {
+   integer event
+   integer team
+   integer placement
+}
 class events {
    integer game
    integer start_datetime
@@ -46,6 +51,7 @@ class tournament_participants {
    int tournament
    int team
    int is_team_captain
+   integer pick_number
 }
 class users {
    text name
@@ -62,6 +68,8 @@ class votes {
    integer game
 }
 
+event_results  -->  events : event➡️id
+event_results  -->  teams : team➡️id
 events  -->  games : game➡️id
 events  -->  users : currently_picking➡️id
 events  -->  users : created_by➡️id

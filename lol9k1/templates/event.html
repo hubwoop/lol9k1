@@ -21,7 +21,12 @@
       {% if teams %}
         <dl>
           {% for _, team in teams.items() %}
-            <dt>{% if team.name %}{{ team.name }}{% else %}Team #{{ team.team_id }}{% endif %}</dt>
+            <dt>
+              {% if team.name %}{{ team.name }}{% else %}Team #{{ team.team_id }}{% endif %}
+              {% if team.team_id in results %}
+                <span class="placement">{{ results[team.team_id]|placement }}</span>
+              {% endif %}
+            </dt>
             {% for player in team.players %}
               {% if player == team.captain %}
                 <dd>{{ player }} 👑</dd>
@@ -118,6 +123,37 @@
         </div>
       {% endif %}
     </div>
+    {% if teams %}
+      <hr>
+      <div class="row">
+        <div class="col col-lg-6">
+          <h3>Results</h3>
+          <form action="{{ url_for('event.save_results', event_id=event_id) }}" method="post">
+            {% for _, team in teams.items() %}
+              {% set team_label = team.name if team.name else 'Team #' ~ team.team_id %}
+              <div class="form-group row">
+                <label class="col-sm-6 col-form-label" for="placement-{{ team.team_id }}">{{ team_label }}</label>
+                <div class="col-sm-6">
+                  <select class="form-control" name="placement-{{ team.team_id }}" id="placement-{{ team.team_id }}">
+                    <option value="">not placed</option>
+                    {% for placement in range(1, teams|length + 1) %}
+                      <option value="{{ placement }}"{% if results.get(team.team_id) == placement %} selected{% endif %}>
+                        {{ placement|placement }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+            {% endfor %}
+            <small class="form-text text-muted">
+              Results count towards the <a href="{{ url_for('leaderboard.leaderboard') }}">leaderboard</a>.
+              Teams may share a placement. Changing the captains clears the results.
+            </small>
+            <br>
+            <button type="submit" class="btn btn-primary">Save results</button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
     {% if teams and enable_brackets %}
       <hr>
       <div class="row">

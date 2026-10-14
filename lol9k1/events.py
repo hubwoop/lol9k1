@@ -107,6 +107,7 @@ def event(event_id):
                            users=users,
                            captains=captains,
                            hasParticipants=has_participants,
+                           results=get_results(event_id),
                            enable_brackets=current_app.config['ENABLE_BRACKETS'])
 
 
@@ -149,6 +150,32 @@ def handle_captains_post(event_id):
         captains = None
     if captains or type(captains) == list and 'check-captains' in request.form:
         update_captains(event_id, captains)
+
+
+@bp.route('/<int:event_id>/results', methods=['POST'])
+@auth.login_required
+def save_results(event_id):
+    creator = get_creator_or_404(event_id)
+    if not user_may_manage(creator) or get_state(event_id) == 'pickphase':
+        flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
+        return redirect(url_for('.event', event_id=event_id))
+    team_ids = {captain.team_id for captain in get_captains_from_db(event_id)}
+    placements = {}
+    for team_id in team_ids:
+        value = request.form.get(f'placement-{team_id}', '').strip()
+        if not value:
+            continue
+        try:
+            placement = int(value)
+        except ValueError:
+            placement = 0
+        if not 1 <= placement <= len(team_ids):
+            flash(f'Placements must be between 1 and {len(team_ids)}.', STYLE.warning)
+            return redirect(url_for('.event', event_id=event_id))
+        placements[team_id] = placement
+    set_results(event_id, placements)
+    flash('Results saved.' if placements else 'Results cleared.', STYLE.success)
+    return redirect(url_for('.event', event_id=event_id))
 
 
 @bp.route('/<int:event_id>/stop-pick-phase', methods=['GET'])
@@ -217,8 +244,10 @@ def add_teammate_api(event_id, team_id):
             or requested_user not in possible_users:
         return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
     # add requested user to requesting team
-    db.execute('''insert into tournament_participants (user, tournament, team) values (?, ? ,?)''',
-               (requested_user, event_id, team_id))
+    db.execute('''
+      insert into tournament_participants (user, tournament, team, pick_number)
+      values (?, ?, ?, (select coalesce(max(pick_number), 0) + 1 from tournament_participants where tournament = ?))
+    ''', (requested_user, event_id, team_id, event_id))
     db.commit()
     skips = get_skips(event_id)
     if skips > 0:
@@ -567,6 +596,7 @@ def delete_with_all_dependencies_in_database(event_id):
     game = db.execute('''
       select games.slug from events e join games on e.game = games.id where e.id = ?
     ''', [event_id]).fetchone()[0]
+    db.execute('''delete from event_results where event = ?''', [event_id])
     delete_all_teams_associated_with(event_id)
     db.execute('''delete from tournament_participants where tournament = ?''', [event_id])
     db.execute('''delete from events where id = ?''', [event_id])
@@ -608,8 +638,9 @@ def get_participants(event_id):
 
 
 def update_captains(event_id, captains):
-    # reset captains and teams
+    # reset captains and teams, results belong to the old teams
     db = get_db()
+    db.execute('''delete from event_results where event = ?''', [event_id])
     delete_all_teams_associated_with(event_id)
     db.execute('''delete from tournament_participants where tournament = ?''', [event_id])
     captains_teams = []
@@ -629,6 +660,20 @@ def delete_all_teams_associated_with(event_id):
     db = get_db()
     db.execute('''delete from teams where id in (select team from tournament_participants where tournament = ?)
               ''', [event_id])
+    db.commit()
+
+
+def get_results(event_id) -> dict:
+    """Maps the team ids of an event to their placement, 1 = winner."""
+    rows = get_db().execute('''select team, placement from event_results where event = ?''', [event_id])
+    return {row['team']: row['placement'] for row in rows}
+
+
+def set_results(event_id, placements: dict):
+    db = get_db()
+    db.execute('''delete from event_results where event = ?''', [event_id])
+    db.executemany('''insert into event_results (event, team, placement) values (?, ?, ?)''',
+                   [(event_id, team_id, placement) for team_id, placement in placements.items()])
     db.commit()
 
 
