@@ -30,6 +30,7 @@
           <ul>
             <li><a href="{{ url_for('landing.landing') }}">Home</a></li>
             <li><a href="{{ url_for('schedule.schedule') }}">Schedule</a></li>
+            <li><a href="{{ url_for('leaderboard.leaderboard') }}">Leaderboard</a></li>
             <li><a href="{{ url_for('landing.landing', _anchor='addGameForm') }}">Add Game</a></li>
             <li><a href="{{ url_for('invite.invite') }}">Invite</a></li>
             {% if session.get('is_admin', None) %}

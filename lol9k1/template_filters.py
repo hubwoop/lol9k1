@@ -20,6 +20,10 @@ def register_on(app):
     def translate_gender(gender: Union[int, str], fmt=None) -> str:
         return utilities.GENDER_INT_TO_STRING[int(gender)]
 
+    @app.template_filter('placement')
+    def format_placement(placement: int) -> str:
+        return utilities.placement_to_string(placement)
+
     @app.template_filter('slugify')
     def translate_gender(string: str, fmt=None) -> str:
         return slugify(string)

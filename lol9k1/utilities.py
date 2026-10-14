@@ -50,3 +50,13 @@ def generate_name() -> str:
 
 def generate_token() -> str:
     return uuid.uuid4().hex[:12]
+
+
+def placement_to_string(placement: int) -> str:
+    """1 -> '🥇 1st', 4 -> '4th', 11 -> '11th', 22 -> '22nd'"""
+    medals = {1: '🥇 ', 2: '🥈 ', 3: '🥉 '}
+    if 10 <= placement % 100 <= 20:
+        suffix = 'th'
+    else:
+        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(placement % 10, 'th')
+    return f'{medals.get(placement, "")}{placement}{suffix}'

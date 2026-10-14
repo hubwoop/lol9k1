@@ -1,0 +1,55 @@
+{% extends "layout.html" %}
+{% block title %}Leaderboard{% endblock %}
+{% block body %}
+  <h2>Leaderboard</h2>
+  {% if leaderboard.standings %}
+    <table class="table table-sm leaderboard">
+      <thead>
+      <tr>
+        <th scope="col">#</th>
+        <th scope="col">Player</th>
+        <th scope="col" title="One point for every team finished ahead of">Points</th>
+        <th scope="col">Wins</th>
+        <th scope="col">Played</th>
+        <th scope="col">Badges</th>
+      </tr>
+      </thead>
+      <tbody>
+      {% for standing in leaderboard.standings %}
+        <tr>
+          <td>{{ standing.rank }}</td>
+          <td>{{ standing.name }}</td>
+          <td>{{ standing.points }}</td>
+          <td>{{ standing.wins }}</td>
+          <td>{{ standing.played }}</td>
+          <td>
+            {% for badge in standing.badges %}
+              <span class="badgeIcon" title="{{ badge.title }}: {{ badge.description }}">{{ badge.icon }}</span>
+            {% endfor %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <small class="text-muted">
+      An event counts once its results are recorded. Every team you finish ahead of is worth a point.
+    </small>
+  {% else %}
+    <p>No results recorded yet. Get playing!</p>
+  {% endif %}
+
+  <h3>Achievements</h3>
+  {% if leaderboard.achievements %}
+    <dl class="achievements">
+      {% for achievement in leaderboard.achievements %}
+        <dt>{{ achievement.badge.icon }} {{ achievement.badge.title }}</dt>
+        <dd>
+          <span class="text-muted">{{ achievement.badge.description }}</span><br>
+          {{ achievement.holders|join(', ') }}
+        </dd>
+      {% endfor %}
+    </dl>
+  {% else %}
+    <p>Nobody has earned a badge yet.</p>
+  {% endif %}
+{% endblock %}
