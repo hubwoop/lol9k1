@@ -46,6 +46,9 @@ def create_app(test_config=None):
     from . import leaderboard
     app.register_blueprint(leaderboard.bp)
 
+    from . import minigolf
+    app.register_blueprint(minigolf.bp)
+
     return app
 
 

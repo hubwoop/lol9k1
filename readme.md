@@ -2,6 +2,11 @@
 
 Organize your lan party!
 
+## Minigolf ⛳
+Bored while waiting for the next match? Hit *Minigolf* in the navigation: a 9 hole top down minigolf
+game (windmill included) for 1-4 players taking turns on one computer. Your rounds land in the
+shared Hall of Fame, so you can compete with everyone else at the party.
+
 ## Recommended Setup
 ### On macOS and Linux 
 - `python3 -m venv lol9k1env`

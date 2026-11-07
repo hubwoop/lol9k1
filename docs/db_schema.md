@@ -51,6 +51,13 @@ class matches {
    integer score2
    integer id
 }
+class minigolf_rounds {
+   integer user
+   text course
+   text strokes
+   text played_at
+   integer id
+}
 class teams {
    text name
    integer captain
@@ -88,6 +95,7 @@ invites  -->  users : added_by➡️id
 matches  -->  events : event➡️id
 matches  -->  teams : team1➡️id
 matches  -->  teams : team2➡️id
+minigolf_rounds  -->  users : user➡️id
 tournament_participants  -->  events : tournament➡️id
 tournament_participants  -->  teams : team➡️id
 tournament_participants  -->  users : user➡️id
