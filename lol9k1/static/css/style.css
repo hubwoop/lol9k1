@@ -134,3 +134,13 @@ div.mainNavigation > nav > ul > li:nth-last-child(-n+2)::after {
         background: #292f34;
     }
 }
+
+.placement {
+    font-weight: normal;
+    margin-left: .5em;
+}
+
+.badgeIcon {
+    cursor: help;
+    margin-right: .25em;
+}
