@@ -29,6 +29,14 @@ window.lol9k1MinigolfRules = (function () {
          * How a ball too fast to drop is pulled towards the centre of the cup, as a velocity change.
          * (dx, dy) points from the ball to the centre. Dead centre there is no direction to pull in.
          */
+        /**
+         * Where a ball goes back to after a splash or after being knocked into the cup. The shooter's ball
+         * goes back to where it was putted from. Anybody else's goes back to where it lay before this shot.
+         */
+        returnSpot(ball, isShooter) {
+            return isShooter ? {x: ball.lastX, y: ball.lastY} : {x: ball.shotX, y: ball.shotY};
+        },
+
         cupPull(dx, dy, dt) {
             const d = Math.sqrt(dx * dx + dy * dy);
             if (d <= 1e-6) {
@@ -594,26 +602,28 @@ window.lol9k1MinigolfRules = (function () {
     function splash(b) {
         effects.push({kind: 'splash', x: b.x, y: b.y, t: 0, life: 0.8});
         sfx.splash();
-        b.x = b.lastX;
-        b.y = b.lastY;
+        const owner = players.find(p => p.ball === b);
+        const spot = rules.returnSpot(b, owner === players[turn]);
+        b.x = spot.x;
+        b.y = spot.y;
         b.vx = b.vy = 0;
         b.moving = false;
-        const owner = players.find(p => p.ball === b);
         // somebody else's putt costs a ball one penalty stroke at most (the server holds them to that)
         const penalty = owner === players[turn] || !b.penalized;
         if (penalty) {
             b.strokes += 1;
             b.penalized = true;
         }
-        banner = {text: 'SPLASH!', sub: penalty ? `${owner.name}: +1 penalty stroke` : `${owner.name}: back where it was putted from`,
+        banner = {text: 'SPLASH!', sub: penalty ? `${owner.name}: +1 penalty stroke` : `${owner.name}: back where it lay`,
             until: performance.now() + 1400};
         renderScorecard();
     }
 
     // Only the player putting can hole out. A ball knocked into the cup goes back to where it lay.
     function knockedIn(b) {
-        b.x = b.shotX;
-        b.y = b.shotY;
+        const spot = rules.returnSpot(b, false);
+        b.x = spot.x;
+        b.y = spot.y;
         b.vx = b.vy = 0;
         b.moving = false;
         const owner = players.find(p => p.ball === b);

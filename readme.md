@@ -12,7 +12,7 @@ from their own computers. Everybody sees every putt roll, and every player's rou
 Hall of Fame. A player who hasn't putted for 90 seconds can be skipped by the others.
 
 Balls knock each other around, but only your own putt can hole your ball: a ball knocked into the
-cup goes back to where it lay, and a ball knocked into the water costs its player one penalty stroke.
+cup goes back to where it lay, and so does a ball knocked into the water, for one penalty stroke.
 
 ## Recommended Setup
 ### On macOS and Linux 
