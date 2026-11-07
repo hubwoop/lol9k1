@@ -1,0 +1,80 @@
+{% extends "layout.html" %}
+{% block title %}Minigolf{% endblock %}
+{% block head %}
+  {{ super() }}
+  <link rel=stylesheet type=text/css href="{{ url_for('static', filename='css/minigolf.css') }}">
+{% endblock %}
+{% block body %}
+  <div id="minigolf" class="minigolf"
+       data-player="{{ session.get('username') }}"
+       data-submit-url="{{ url_for('minigolf.submit_round') }}"
+       data-max-strokes="{{ max_strokes }}">
+    <div class="minigolfTitle">⛳ LOL 9001 MINIGOLF ⛳</div>
+    <div class="minigolfStage">
+      <canvas id="minigolfCanvas" width="640" height="400" aria-label="Minigolf course"></canvas>
+
+      <div id="minigolfSetup" class="minigolfOverlay">
+        <h3>Who's playing?</h3>
+        <p class="minigolfHint">Hot seat for up to 4 players. Take turns on this computer!</p>
+        <ol id="minigolfPlayers"></ol>
+        <button type="button" id="minigolfAddPlayer" class="minigolfButton">+ Add player</button>
+        <button type="button" id="minigolfStart" class="minigolfButton minigolfButtonBig">Tee off!</button>
+        <p class="minigolfHint">
+          Click &amp; drag anywhere to aim, pull back further for more power, let go to putt.
+          Right click or <kbd>Esc</kbd> cancels a shot. Water costs a penalty stroke,
+          {{ max_strokes }} strokes max per hole.
+        </p>
+      </div>
+
+      <div id="minigolfResult" class="minigolfOverlay" hidden>
+        <h3>Final results</h3>
+        <table class="minigolfResultTable">
+          <tbody id="minigolfResultRows"></tbody>
+        </table>
+        <p id="minigolfSaved" class="minigolfHint"></p>
+        <button type="button" id="minigolfAgain" class="minigolfButton minigolfButtonBig">Play again</button>
+      </div>
+    </div>
+    <div class="minigolfToolbar">
+      <span id="minigolfStatus">Ready.</span>
+      <button type="button" id="minigolfSound" class="minigolfButton" aria-pressed="true">🔊 Sound</button>
+    </div>
+
+    <table class="minigolfScorecard" id="minigolfScorecard">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="row minigolfBoards">
+    <div class="col-md-6">
+      <h3>🏆 Hall of Fame</h3>
+      <table class="table table-sm">
+        <thead><tr><th>#</th><th>Player</th><th>Best round</th><th>Rounds</th></tr></thead>
+        <tbody id="minigolfBest">
+        {% for row in best %}
+          <tr><td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.best }}</td><td>{{ row.rounds }}</td></tr>
+        {% else %}
+          <tr><td colspan="4">No rounds played yet. Be the first!</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="col-md-6">
+      <h3>🕑 Recent rounds</h3>
+      <table class="table table-sm">
+        <thead><tr><th>Player</th><th>Strokes</th><th>When</th></tr></thead>
+        <tbody id="minigolfRecent">
+        {% for row in recent %}
+          <tr><td>{{ row.name }}</td><td>{{ row.total }}</td><td>{{ row.played_at }}</td></tr>
+        {% else %}
+          <tr><td colspan="3">Nothing here yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
+{% block endofbody %}
+  <script src="{{ url_for('static', filename='js/minigolf.js') }}"></script>
+{% endblock %}

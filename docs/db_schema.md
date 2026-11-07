@@ -36,6 +36,14 @@ class invites {
    integer added_by
    text token
 }
+class minigolf_rounds {
+   integer user
+   text course
+   text strokes
+   integer total
+   text played_at
+   integer id
+}
 class teams {
    text name
    integer captain
@@ -67,6 +75,7 @@ events  -->  users : currently_picking➡️id
 events  -->  users : created_by➡️id
 games  -->  users : added_by➡️id
 invites  -->  users : added_by➡️id
+minigolf_rounds  -->  users : user➡️id
 tournament_participants  -->  events : tournament➡️id
 tournament_participants  -->  teams : team➡️id
 tournament_participants  -->  users : user➡️id
