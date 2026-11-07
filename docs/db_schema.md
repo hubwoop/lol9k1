@@ -51,6 +51,27 @@ class matches {
    integer score2
    integer id
 }
+class minigolf_game_players {
+   integer game
+   integer user
+   integer id
+}
+class minigolf_games {
+   text course
+   integer host
+   text status
+   text created_at
+   text started_at
+   integer id
+}
+class minigolf_moves {
+   integer game
+   integer seq
+   integer user
+   text kind
+   text data
+   text played_at
+}
 class minigolf_rounds {
    integer user
    text course
@@ -95,6 +116,11 @@ invites  -->  users : added_by➡️id
 matches  -->  events : event➡️id
 matches  -->  teams : team1➡️id
 matches  -->  teams : team2➡️id
+minigolf_game_players  -->  minigolf_games : game➡️id
+minigolf_game_players  -->  users : user➡️id
+minigolf_games  -->  users : host➡️id
+minigolf_moves  -->  minigolf_games : game➡️id
+minigolf_moves  -->  users : user➡️id
 minigolf_rounds  -->  users : user➡️id
 tournament_participants  -->  events : tournament➡️id
 tournament_participants  -->  teams : team➡️id
