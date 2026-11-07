@@ -55,6 +55,9 @@ def test_unknown_packs_are_refused(page: Page, seed, alice):
     assert page.request.post('/minigolf/api/rounds', data={'course': 'nope', 'strokes': [2] * 9}).status == 400
     assert page.request.get('/minigolf/api/leaderboard?course=nope').status == 400
     assert page.request.post('/minigolf/api/games', data={'course': 'nope'}).status == 400
+    # not even a string
+    assert page.request.post('/minigolf/api/rounds', data={'course': ['brawl'], 'strokes': [2] * 9}).status == 400
+    assert page.request.post('/minigolf/api/games', data={'course': {'brawl': 1}}).status == 400
     assert seed.query('select * from minigolf_rounds') == []
     assert seed.query('select * from minigolf_games') == []
 

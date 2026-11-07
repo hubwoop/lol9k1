@@ -79,8 +79,8 @@ def submit_round_api():
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return json.dumps('expected a JSON object'), 400
-    course = payload.get('course', COURSE)
-    if course not in COURSES:
+    course = known_course(payload.get('course', COURSE))
+    if course is None:
         return json.dumps(f'course must be one of {", ".join(COURSES)}'), 400
     holes = COURSES[course]['holes']
     strokes = payload.get('strokes')
@@ -98,9 +98,15 @@ def save_round(db: sqlite3.Connection, user: int, course: str, strokes: list[int
                [user, course, json.dumps(strokes), datetime.now().strftime(events.EVENT_DATETIME_FORMAT)])
 
 
+def known_course(value) -> Optional[str]:
+    """The id of the course a request names, None if there's no such course (or it isn't even a string).
+    It's the server's own id that's returned, so nothing a client sent gets echoed back."""
+    return next((course for course in COURSES if course == value), None)
+
+
 def _course_arg() -> str:
-    course = request.args.get('course', COURSE)
-    if course not in COURSES:
+    course = known_course(request.args.get('course', COURSE))
+    if course is None:
         raise _ApiError(f'course must be one of {", ".join(COURSES)}', 400)
     return course
 
@@ -417,8 +423,8 @@ def games_api():
 def create_game_api():
     payload = request.get_json(silent=True)
     # without a body it's a game on the default course
-    course = payload.get('course', COURSE) if isinstance(payload, dict) else COURSE
-    if course not in COURSES:
+    course = known_course(payload.get('course', COURSE) if isinstance(payload, dict) else COURSE)
+    if course is None:
         raise _ApiError(f'course must be one of {", ".join(COURSES)}', 400)
     db = get_db()
     # lobbies nobody started in time aren't offered anymore, so they can go. Played games are kept
