@@ -471,8 +471,11 @@
                     return;
                 }
                 // too fast: the cup pulls at the ball and it lips out
-                b.vx += cx / cd * 2600 * dt;
-                b.vy += cy / cd * 2600 * dt;
+                // (dead centre there is no direction to pull in, and dividing by 0 would make the ball NaN)
+                if (cd > 1e-6) {
+                    b.vx += cx / cd * 2600 * dt;
+                    b.vy += cy / cd * 2600 * dt;
+                }
             }
             // friction
             const factor = Math.exp(-drag * dt);
@@ -1073,16 +1076,28 @@
         const ranking = players.slice().sort((a, b) => total(a) - total(b));
         const rows = document.getElementById('minigolfResultRows');
         rows.textContent = '';
+        const MEDALS = ['🥇', '🥈', '🥉', '4.'];
+        let place = 0;
         ranking.forEach((p, i) => {
             const tr = el('tr');
-            const place = i > 0 && total(p) === total(ranking[i - 1]) ? '' : ['🥇', '🥈', '🥉', '4.'][i];
-            tr.appendChild(el('td', place));
+            // tied players share a place, the next one after them skips ahead (1, 1, 3)
+            if (i > 0 && total(p) !== total(ranking[i - 1])) {
+                place = i;
+            }
+            tr.appendChild(el('td', MEDALS[place]));
             tr.appendChild(el('td', p.name));
             tr.appendChild(el('td', `${total(p)} (${toPar(p)})`));
             rows.appendChild(tr);
         });
         result.hidden = false;
-        setStatus(players.length > 1 ? `${ranking[0].name} wins!` : `Round finished: ${total(ranking[0])} strokes.`);
+        const winners = ranking.filter(p => total(p) === total(ranking[0]));
+        if (players.length === 1) {
+            setStatus(`Round finished: ${total(ranking[0])} strokes.`);
+        } else if (winners.length > 1) {
+            setStatus(`It's a tie! ${winners.map(p => p.name).join(' & ')} share the win.`);
+        } else {
+            setStatus(`${ranking[0].name} wins!`);
+        }
         submitRound(players.find(p => p.isMe));
     }
 
@@ -1095,6 +1110,9 @@
             credentials: 'include',
             body: JSON.stringify({strokes: player.scores}),
         }).then(response => {
+            if (response.status === 401) {
+                throw new Error('logged out');
+            }
             if (!response.ok || response.redirected) {
                 throw new Error(`HTTP ${response.status}`);
             }
@@ -1104,7 +1122,9 @@
             renderLeaderboard(data);
         }).catch(error => {
             console.error('Saving the minigolf round failed:', error);
-            saved.textContent = 'Could not save your round, sorry!';
+            saved.textContent = error.message === 'logged out'
+                ? 'You were logged out, so your round could not be saved. Log in again to keep playing.'
+                : 'Could not save your round, sorry!';
         });
     }
 

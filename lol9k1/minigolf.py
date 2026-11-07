@@ -1,18 +1,32 @@
 """A small top down minigolf game to kill time between matches, with a shared leaderboard."""
+import functools
 from datetime import datetime
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, g, jsonify, render_template, request, session
 
 from lol9k1.auth import auth
 from lol9k1.database import get_db
 
 bp = Blueprint('minigolf', __name__, url_prefix='/minigolf')
 
-# Must match the course in static/js/minigolf.js.
 COURSE = 'classic'
-HOLES = 9
+HOLES = 9  # must match the number of holes in static/js/minigolf.js
 MAX_STROKES = 10  # per hole, a ball that isn't holed by then scores this
 LEADERBOARD_SIZE = 10
+
+
+def api_login_required(view):
+    """Like auth.login_required, but answers 401 JSON instead of redirecting to the login page.
+
+    It also leaves the redirect target after login alone, so logging in again doesn't send the
+    browser to a POST only API url.
+    """
+    @functools.wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if g.user is None:
+            return jsonify(error='not logged in'), 401
+        return view(*args, **kwargs)
+    return wrapped_view
 
 
 @bp.route('/')
@@ -22,7 +36,7 @@ def minigolf() -> str:
 
 
 @bp.route('/api/rounds', methods=['POST'])
-@auth.login_required
+@api_login_required
 def submit_round():
     payload = request.get_json(silent=True)
     strokes = payload.get('strokes') if isinstance(payload, dict) else None
@@ -38,7 +52,7 @@ def submit_round():
 
 
 @bp.route('/api/leaderboard')
-@auth.login_required
+@api_login_required
 def get_leaderboard():
     return jsonify(leaderboard())
 
