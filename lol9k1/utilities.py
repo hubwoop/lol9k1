@@ -50,3 +50,4 @@ def generate_name() -> str:
 
 def generate_token() -> str:
     return uuid.uuid4().hex[:12]
+
