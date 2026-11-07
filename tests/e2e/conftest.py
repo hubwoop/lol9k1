@@ -26,7 +26,7 @@ from werkzeug.security import generate_password_hash
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PASSWORD = 'correct horse battery staple'
 DATETIME_FORMAT = '%Y-%m-%dT%H:%M'  # format used by <input type="datetime-local">
-TABLES = ('minigolf_rounds', 'matches', 'event_results', 'tournament_participants', 'teams', 'events', 'votes',
+TABLES = ('minigolf_moves', 'minigolf_game_players', 'minigolf_games', 'minigolf_rounds', 'matches', 'event_results', 'tournament_participants', 'teams', 'events', 'votes',
           'games', 'users', 'invites', 'config')
 
 

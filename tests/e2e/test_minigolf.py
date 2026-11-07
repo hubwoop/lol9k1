@@ -170,3 +170,14 @@ def test_ball_dead_centre_in_the_cup_is_not_pulled_anywhere(page: Page, alice):
     assert page.evaluate('lol9k1MinigolfRules.cupPull(0, 0, 1 / 240)') == {'vx': 0, 'vy': 0}
     pull = page.evaluate('lol9k1MinigolfRules.cupPull(3, 4, 1)')
     assert (round(pull['vx']), round(pull['vy'])) == (1560, 2080)
+
+
+def test_balls_go_back_to_where_they_lay(page: Page, alice):
+    login(page, alice)
+    page.goto('/minigolf/')
+
+    ball = '{lastX: 1, lastY: 2, shotX: 3, shotY: 4}'
+    # the shooter's ball goes back to where it was putted from
+    assert page.evaluate(f'lol9k1MinigolfRules.returnSpot({ball}, true)') == {'x': 1, 'y': 2}
+    # a ball knocked into the water or the cup goes back to where it lay before the shot
+    assert page.evaluate(f'lol9k1MinigolfRules.returnSpot({ball}, false)') == {'x': 3, 'y': 4}

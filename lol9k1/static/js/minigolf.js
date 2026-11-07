@@ -1,6 +1,7 @@
 /*
  * LOL 9001 Minigolf: a tiny top down minigolf game for the downtime between matches.
- * Hot seat for 1-4 players, the logged-in player's rounds go to the leaderboard.
+ * Hot seat for 1-4 players, the logged-in player's rounds go to the leaderboard. Or across the network,
+ * every registered player on their own computer, and everybody's rounds go to the leaderboard.
  * No dependencies, just a canvas.
  *
  * lol9k1's own scripts usually live inline in the templates. The game is a file of its own
@@ -22,6 +23,14 @@ window.lol9k1MinigolfRules = (function () {
          */
         places(totals) {
             return totals.map(t => totals.filter(other => other < t).length);
+        },
+
+        /**
+         * Where a ball goes back to after a splash or after being knocked into the cup. The shooter's ball
+         * goes back to where it was putted from. Anybody else's goes back to where it lay before this shot.
+         */
+        returnSpot(ball, isShooter) {
+            return isShooter ? {x: ball.lastX, y: ball.lastY} : {x: ball.shotX, y: ball.shotY};
         },
 
         /**
@@ -280,7 +289,7 @@ window.lol9k1MinigolfRules = (function () {
     }
 
     // ---------------------------------------------------------------- game state
-    let players = [];        // {name, isMe, color, scores: [], ball}
+    let players = [];        // {name, isMe, left, color, scores: [], ball}
     let holeIndex = 0;
     let hole = null;         // HOLES[holeIndex] plus precomputed segments
     let turn = 0;            // index into players
@@ -290,6 +299,9 @@ window.lol9k1MinigolfRules = (function () {
     let aim = null;          // {sx, sy, x, y} pointer drag in course coordinates
     let effects = [];        // splashes and sparkles
     let order = [];          // tee order on the current hole
+    // A network game, null when playing hot seat. Its moves are replayed in order, net.seq is the next one.
+    // See lol9k1/minigolf.py for how a game is kept in sync.
+    let net = null;          // {id, seq, latest, epoch, posting, started, replaying, lastShot, pollTimer}
 
     function prepareHole(def) {
         const h = Object.assign({blocks: [], sand: [], water: [], boosts: [], rotors: [], sliders: []}, def);
@@ -299,7 +311,9 @@ window.lol9k1MinigolfRules = (function () {
     }
 
     function newBall() {
-        return {x: 0, y: 0, vx: 0, vy: 0, lastX: 0, lastY: 0, onCourse: false, sunk: false, out: false,
+        // lastX/Y: where its player last putted it from. shotX/Y: where it lay when the current shot began.
+        return {x: 0, y: 0, vx: 0, vy: 0, lastX: 0, lastY: 0, shotX: 0, shotY: 0, penalized: false,
+            onCourse: false, sunk: false, out: false,
             strokes: 0, moving: false, sinkAnim: 0};
     }
 
@@ -326,15 +340,20 @@ window.lol9k1MinigolfRules = (function () {
         players.forEach(p => {
             p.ball = newBall();
         });
-        // honours: best score on the previous hole tees off first
-        order = players.map((p, i) => i);
-        if (index > 0) {
-            order.sort((a, b) => players[a].scores[index - 1] - players[b].scores[index - 1] || a - b);
-        }
-        turn = order[0];
+        order = honourOrder(index);
+        turn = order.find(i => !players[i].left);
         banner = {text: `Hole ${index + 1}: ${hole.name}`, sub: `Par ${hole.par}`, until: performance.now() + 2200};
         beginTurn();
         renderScorecard();
+    }
+
+    // honours: best score on the previous hole tees off first
+    function honourOrder(index) {
+        const o = players.map((p, i) => i);
+        if (index > 0) {
+            o.sort((a, b) => players[a].scores[index - 1] - players[b].scores[index - 1] || a - b);
+        }
+        return o;
     }
 
     function beginTurn() {
@@ -346,7 +365,21 @@ window.lol9k1MinigolfRules = (function () {
         }
         state = 'aim';
         aim = null;
-        setStatus(`${p.name}, it's your turn! Stroke ${p.ball.strokes + 1}.`);
+        if (myTurn()) {
+            setStatus(`${p.name}, it's your turn! Stroke ${p.ball.strokes + 1}.`);
+        } else {
+            setStatus(`Waiting for ${p.name} to putt... (stroke ${p.ball.strokes + 1})`);
+        }
+    }
+
+    // in a network game only the player at this computer may putt
+    function myTurn() {
+        return !net || players[turn].isMe;
+    }
+
+    // and not before the server has their last shot
+    function canPutt() {
+        return myTurn() && !(net && net.posting);
     }
 
     function setStatus(text) {
@@ -356,6 +389,11 @@ window.lol9k1MinigolfRules = (function () {
     function shoot(power, dirX, dirY) {
         const p = players[turn];
         const b = p.ball;
+        players.forEach(other => {
+            other.ball.shotX = other.ball.x;
+            other.ball.shotY = other.ball.y;
+            other.ball.penalized = false;
+        });
         b.lastX = b.x;
         b.lastY = b.y;
         b.vx = dirX * power * MAX_SPEED;
@@ -363,6 +401,9 @@ window.lol9k1MinigolfRules = (function () {
         b.moving = true;
         b.strokes += 1;
         state = 'rolling';
+        if (net) {
+            net.lastShot = {power, dx: dirX, dy: dirY, time};
+        }
         sfx.putt(power);
         setStatus(`${p.name} putts... (stroke ${b.strokes})`);
         renderScorecard();
@@ -376,18 +417,27 @@ window.lol9k1MinigolfRules = (function () {
     function endOfShot() {
         const p = players[turn];
         const b = p.ball;
+        const replayed = net && net.replaying;
+        if (replayed) {
+            // the shooter's browser has the last word on where the balls ended up
+            net.replaying = null;
+            takeBalls(replayed.balls);
+        }
         if (!b.sunk && b.strokes >= MAX_STROKES) {
             b.out = true;
             b.strokes = MAX_STROKES;
             banner = {text: `${p.name}: ${MAX_STROKES} strokes`, sub: 'Pick it up, buddy.', until: performance.now() + 1500};
         }
         renderScorecard();
+        if (net && !replayed) {
+            postShot();
+        }
         // next player in honour order who still has to play
         const at = order.indexOf(turn);
         for (let i = 1; i <= order.length; i++) {
             const candidate = order[(at + i) % order.length];
             const cb = players[candidate].ball;
-            if (!cb.sunk && !cb.out) {
+            if (!cb.sunk && !cb.out && !players[candidate].left) {
                 turn = candidate;
                 beginTurn();
                 return;
@@ -404,6 +454,9 @@ window.lol9k1MinigolfRules = (function () {
         state = 'between';
         const last = holeIndex === HOLES.length - 1;
         setTimeout(() => {
+            if (state !== 'between') {
+                return; // left the game in the meantime
+            }
             if (last) {
                 finishRound();
             } else {
@@ -509,7 +562,11 @@ window.lol9k1MinigolfRules = (function () {
             let speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
             if (cd < CUP_R - 2) {
                 if (speed < SINK_SPEED) {
-                    sink(b);
+                    if (b === players[turn].ball) {
+                        sink(b);
+                    } else {
+                        knockedIn(b);
+                    }
                     return;
                 }
                 // too fast: the cup pulls at the ball and it lips out
@@ -545,14 +602,33 @@ window.lol9k1MinigolfRules = (function () {
     function splash(b) {
         effects.push({kind: 'splash', x: b.x, y: b.y, t: 0, life: 0.8});
         sfx.splash();
-        b.x = b.lastX;
-        b.y = b.lastY;
+        const owner = players.find(p => p.ball === b);
+        const spot = rules.returnSpot(b, owner === players[turn]);
+        b.x = spot.x;
+        b.y = spot.y;
         b.vx = b.vy = 0;
         b.moving = false;
-        b.strokes += 1; // penalty
-        const owner = players.find(p => p.ball === b);
-        banner = {text: 'SPLASH!', sub: `${owner.name}: +1 penalty stroke`, until: performance.now() + 1400};
+        // somebody else's putt costs a ball one penalty stroke at most (the server holds them to that)
+        const penalty = owner === players[turn] || !b.penalized;
+        if (penalty) {
+            b.strokes += 1;
+            b.penalized = true;
+        }
+        banner = {text: 'SPLASH!', sub: penalty ? `${owner.name}: +1 penalty stroke` : `${owner.name}: back where it lay`,
+            until: performance.now() + 1400};
         renderScorecard();
+    }
+
+    // Only the player putting can hole out. A ball knocked into the cup goes back to where it lay.
+    function knockedIn(b) {
+        const spot = rules.returnSpot(b, false);
+        b.x = spot.x;
+        b.y = spot.y;
+        b.vx = b.vy = 0;
+        b.moving = false;
+        const owner = players.find(p => p.ball === b);
+        banner = {text: 'Nice try!', sub: `${owner.name}'s ball goes back, you can't hole out for them`,
+            until: performance.now() + 1600};
     }
 
     function sink(b) {
@@ -950,6 +1026,9 @@ window.lol9k1MinigolfRules = (function () {
         if (state === 'rolling' && !anythingMoving()) {
             endOfShot();
         }
+        if (state === 'aim') {
+            processNet();
+        }
         publishState();
         draw();
         requestAnimationFrame(frame);
@@ -972,7 +1051,7 @@ window.lol9k1MinigolfRules = (function () {
     }
 
     canvas.addEventListener('pointerdown', function (event) {
-        if (state !== 'aim' || event.button !== 0) {
+        if (state !== 'aim' || event.button !== 0 || !canPutt()) {
             if (event.button === 2) {
                 aim = null;
             }
@@ -992,7 +1071,7 @@ window.lol9k1MinigolfRules = (function () {
     canvas.addEventListener('pointerup', function () {
         const v = aimVector();
         aim = null;
-        if (state === 'aim' && v && v.power > 0.03) {
+        if (state === 'aim' && canPutt() && v && v.power > 0.03) {
             shoot(v.power, v.dx, v.dy);
         }
     });
@@ -1064,11 +1143,16 @@ window.lol9k1MinigolfRules = (function () {
     });
 
     document.getElementById('minigolfAgain').addEventListener('click', function () {
+        if (net) {
+            leaveNet();
+            return;
+        }
         result.hidden = true;
         setup.hidden = false;
         state = 'setup';
         renderScorecard();
         setStatus('Ready.');
+        refreshGames();
     });
 
     // ---------------------------------------------------------------- scorecard & results
@@ -1097,7 +1181,7 @@ window.lol9k1MinigolfRules = (function () {
             const swatch = el('span', '● ', 'minigolfSwatch');
             swatch.style.color = p.color;
             name.appendChild(swatch);
-            name.appendChild(document.createTextNode(p.name));
+            name.appendChild(document.createTextNode(p.left ? `${p.name} (left)` : p.name));
             tr.appendChild(name);
             HOLES.forEach((h, i) => {
                 let value = p.scores[i];
@@ -1127,8 +1211,10 @@ window.lol9k1MinigolfRules = (function () {
 
     function finishRound() {
         state = 'finished';
+        aim = null;
         renderScorecard();
-        const ranking = players.slice().sort((a, b) => total(a) - total(b));
+        updateNetControls();
+        const ranking = players.filter(p => !p.left).sort((a, b) => total(a) - total(b));
         const places = rules.places(ranking.map(total));
         const rows = document.getElementById('minigolfResultRows');
         rows.textContent = '';
@@ -1142,14 +1228,25 @@ window.lol9k1MinigolfRules = (function () {
         });
         result.hidden = false;
         const winners = ranking.filter(p => total(p) === total(ranking[0]));
-        if (players.length === 1) {
+        if (!ranking.length) {
+            setStatus('Everybody left, so nobody wins.');
+        } else if (ranking.length === 1) {
             setStatus(`Round finished: ${total(ranking[0])} strokes.`);
         } else if (winners.length > 1) {
             setStatus(`It's a tie! ${winners.map(p => p.name).join(' & ')} share the win.`);
         } else {
             setStatus(`${ranking[0].name} wins!`);
         }
-        submitRound(players.find(p => p.isMe));
+        if (net) {
+            // the server saved everybody's rounds when the last ball dropped
+            clearTimeout(net.pollTimer);
+            document.getElementById('minigolfSaved').textContent = ranking.length
+                ? "Everybody's rounds went into the Hall of Fame." : 'Nobody finished, so no rounds were saved.';
+            api('GET', root.dataset.leaderboardUrl).then(renderLeaderboard).catch(error =>
+                console.error('Loading the minigolf leaderboard failed:', error));
+        } else {
+            submitRound(players.find(p => p.isMe));
+        }
     }
 
     function submitRound(player) {
@@ -1196,11 +1293,402 @@ window.lol9k1MinigolfRules = (function () {
         });
     }
 
+    // ---------------------------------------------------------------- network games
+    //
+    // Every browser in a game polls it. A shot is simulated by the shooter's browser, which posts how it
+    // was played and where all the balls ended up. The others replay the shot from how it was played,
+    // so they see it roll, and then put the balls where the shooter's browser says they are.
+    // Whenever this browser doesn't agree with the server about the game (a missed poll, a player who
+    // left, a reload), it takes the server's state as it is.
+    const gamesUrl = root.dataset.gamesUrl;
+    const MAX_PLAYERS = parseInt(root.dataset.maxPlayers, 10) || 4;
+    const POLL_MS = 1000;
+    const LIST_POLL_MS = 3000;
+    const lobby = document.getElementById('minigolfLobby');
+    const gameList = document.getElementById('minigolfGames');
+    const skipButton = document.getElementById('minigolfSkip');
+    const leaveButton = document.getElementById('minigolfLeave');
+    let listTimer = null;
+
+    function api(method, url, body) {
+        return fetch(url, {
+            method,
+            credentials: 'include',
+            headers: body === undefined ? {} : {'Content-Type': 'application/json'},
+            body: body === undefined ? undefined : JSON.stringify(body),
+        }).then(response => {
+            if (response.status === 401) {
+                throw new Error('logged out');
+            }
+            if (response.redirected) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json().catch(() => null).then(data => {
+                if (!response.ok) {
+                    const error = new Error(typeof data === 'string' ? data : `HTTP ${response.status}`);
+                    error.status = response.status;
+                    throw error;
+                }
+                return data;
+            });
+        });
+    }
+
+    function failed(what, error) {
+        console.error(`${what} failed:`, error);
+        setStatus(error.message === 'logged out'
+            ? 'You were logged out. Log in again to keep playing.'
+            : `${what} failed: ${error.message}`);
+    }
+
+    // the open lobbies and the games this player is in, on the setup screen
+    function refreshGames() {
+        clearTimeout(listTimer);
+        if (net || state !== 'setup') {
+            return;
+        }
+        api('GET', gamesUrl).then(renderGames).catch(error => console.error('Loading the games failed:', error))
+            .finally(() => {
+                if (!net && state === 'setup') {
+                    listTimer = setTimeout(refreshGames, LIST_POLL_MS);
+                }
+            });
+    }
+
+    function renderGames(games) {
+        if (net) {
+            return;
+        }
+        gameList.textContent = '';
+        if (!games.length) {
+            gameList.appendChild(el('li', 'No open games right now. Host one!'));
+        }
+        games.forEach(g => {
+            const li = el('li');
+            li.appendChild(el('span', `${g.host}'s game: ${g.players.join(', ')}`));
+            let label = null;
+            if (g.status === 'playing') {
+                label = 'Resume';
+            } else if (g.joined) {
+                label = 'Open';
+            } else if (g.players.length < MAX_PLAYERS) {
+                label = 'Join';
+            }
+            if (label) {
+                const button = el('button', label, 'minigolfButton');
+                button.type = 'button';
+                button.setAttribute('aria-label', `${label} ${g.host}'s game`);
+                button.addEventListener('click', () => {
+                    if (courseMismatch) {
+                        setStatus(courseMismatch);
+                        return;
+                    }
+                    const request = label === 'Join' ? api('POST', `${gamesUrl}/${g.id}/join`)
+                        : api('GET', `${gamesUrl}/${g.id}`);
+                    request.then(enterNet).catch(error => {
+                        failed('Joining the game', error);
+                        refreshGames();
+                    });
+                });
+                li.appendChild(button);
+            } else {
+                li.appendChild(el('span', '(full)'));
+            }
+            gameList.appendChild(li);
+        });
+    }
+
+    document.getElementById('minigolfHost').addEventListener('click', function () {
+        if (courseMismatch) {
+            setStatus(courseMismatch);
+            return;
+        }
+        api('POST', gamesUrl).then(enterNet).catch(error => failed('Hosting a game', error));
+    });
+
+    function enterNet(view) {
+        clearTimeout(listTimer);
+        net = {id: view.id, seq: 0, latest: null, epoch: 0, posting: false, started: false, replaying: null,
+            lastShot: null, pollTimer: null};
+        setup.hidden = true;
+        result.hidden = true;
+        handle(view);
+        schedulePoll();
+    }
+
+    function leaveNet(message) {
+        if (net) {
+            clearTimeout(net.pollTimer);
+        }
+        net = null;
+        players = [];
+        state = 'setup';
+        aim = null;
+        lobby.hidden = true;
+        result.hidden = true;
+        setup.hidden = false;
+        hole = prepareHole(HOLES[Math.floor(Math.random() * HOLES.length)]);
+        renderScorecard();
+        updateNetControls();
+        setStatus(message || 'Ready.');
+        refreshGames();
+    }
+
+    function schedulePoll() {
+        clearTimeout(net.pollTimer);
+        const n = net;
+        n.pollTimer = setTimeout(() => poll(n), POLL_MS);
+    }
+
+    function poll(n) {
+        if (net !== n || state === 'finished') {
+            return;
+        }
+        if (n.posting) {
+            schedulePoll();
+            return;
+        }
+        const epoch = n.epoch;
+        api('GET', `${gamesUrl}/${n.id}?since=${Math.max(0, n.seq)}`).then(view => {
+            // a poll that was on its way while a shot was sent may not know about it yet
+            if (net === n && epoch === n.epoch) {
+                handle(view);
+            }
+        }).catch(error => {
+            if (net !== n) {
+                return;
+            }
+            if (error.status === 404) {
+                leaveNet('The game was called off.');
+                return;
+            }
+            console.error('Polling the game failed:', error);
+        }).finally(() => {
+            if (net === n) {
+                schedulePoll();
+            }
+        });
+    }
+
+    // the answer to something this player did, newer than any poll that's on its way
+    function accept(view) {
+        if (net) {
+            net.epoch += 1;
+            handle(view);
+        }
+    }
+
+    function handle(view) {
+        if (net.started && view.status === 'lobby') {
+            return;
+        }
+        net.latest = view;
+        if (view.status === 'lobby') {
+            if (view.me === null) {
+                leaveNet("You're not in that game anymore.");
+                return;
+            }
+            showLobby(view);
+            return;
+        }
+        lobby.hidden = true;
+        if (!net.started) {
+            net.started = true;
+            players = view.players.map((p, i) => ({name: p.name, isMe: i === view.me, left: p.left,
+                color: COLORS[i % COLORS.length], scores: [], ball: newBall()}));
+            holeIndex = -1;
+            snap(view);
+            return;
+        }
+        processNet();
+    }
+
+    function showLobby(view) {
+        document.getElementById('minigolfLobbyTitle').textContent = `${view.host}'s game`;
+        const list = document.getElementById('minigolfLobbyPlayers');
+        list.textContent = '';
+        view.players.forEach((p, i) => {
+            const li = el('li');
+            const swatch = el('span', '● ', 'minigolfSwatch');
+            swatch.style.color = COLORS[i % COLORS.length];
+            li.appendChild(swatch);
+            li.appendChild(document.createTextNode(p.name + (i === view.me ? ' (you)' : '')));
+            list.appendChild(li);
+        });
+        const enough = view.players.length >= 2;
+        const start = document.getElementById('minigolfLobbyStart');
+        start.hidden = !view.is_host;
+        start.disabled = !enough;
+        document.getElementById('minigolfLobbyHint').textContent = view.is_host
+            ? (enough ? 'Everybody here? Then start the game!'
+                : "Waiting for players. Tell them to open Minigolf and join your game.")
+            : `Waiting for ${view.host} to start the game.`;
+        lobby.hidden = false;
+        setStatus(`In ${view.host}'s lobby, ${view.players.length} of ${MAX_PLAYERS} players.`);
+    }
+
+    document.getElementById('minigolfLobbyStart').addEventListener('click', function () {
+        if (net) {
+            api('POST', `${gamesUrl}/${net.id}/start`).then(accept).catch(error => failed('Starting the game', error));
+        }
+    });
+
+    function leaveGame() {
+        if (!net) {
+            return;
+        }
+        const n = net;
+        api('POST', `${gamesUrl}/${n.id}/leave`).then(() => {
+            if (net === n) {
+                leaveNet('You left the game.');
+            }
+        }).catch(error => {
+            if (error.status === 404) {
+                leaveNet('The game was called off.');
+            } else {
+                failed('Leaving the game', error);
+            }
+        });
+    }
+
+    document.getElementById('minigolfLobbyLeave').addEventListener('click', leaveGame);
+    leaveButton.addEventListener('click', function () {
+        if (window.confirm("Leave the game? Your round won't count.")) {
+            leaveGame();
+        }
+    });
+
+    skipButton.addEventListener('click', function () {
+        const view = net && net.latest;
+        if (!view || view.turn === null) {
+            return;
+        }
+        api('POST', `${gamesUrl}/${net.id}/skip`, {seat: view.turn, seq: view.seq}).then(accept).catch(error => failed('Skipping', error));
+    });
+
+    function updateNetControls() {
+        const view = net && net.started && state !== 'finished' ? net.latest : null;
+        leaveButton.hidden = !(view && view.me !== null && !view.players[view.me].left);
+        skipButton.hidden = !(view && view.can_skip && view.turn !== null);
+        if (!skipButton.hidden) {
+            skipButton.textContent = `Skip ${view.players[view.turn].name}`;
+        }
+    }
+
+    // Catches up with the server once this browser is done with what it was showing.
+    function processNet() {
+        if (!net || !net.started || !net.latest || net.posting || state === 'rolling' || state === 'between') {
+            return;
+        }
+        updateNetControls();
+        if (state === 'finished') {
+            return;
+        }
+        const view = net.latest;
+        const move = (view.moves || []).find(m => m.seq === net.seq);
+        if (move && move.kind === 'shot' && move.hole === holeIndex && move.seat === turn && !players[turn].isMe) {
+            net.seq += 1;
+            net.replaying = move;
+            aim = null;
+            time = move.shot.time; // so the windmill and the sliders are where they were
+            shoot(move.shot.power, move.shot.dx, move.shot.dy);
+            return;
+        }
+        if (view.seq !== net.seq || view.status !== 'playing' || view.hole !== holeIndex || view.turn !== turn
+            || view.players.some((p, i) => p.left !== players[i].left)) {
+            snap(view);
+        }
+    }
+
+    function ballFrom(s, b) {
+        b = b || newBall();
+        b.vx = b.vy = 0;
+        b.moving = false;
+        b.onCourse = s.on;
+        if (s.on) {
+            b.x = b.lastX = s.x;
+            b.y = b.lastY = s.y;
+        }
+        b.strokes = s.strokes;
+        if (s.sunk && !b.sunk) {
+            b.sinkAnim = 1;
+        }
+        b.sunk = s.sunk;
+        b.out = s.out;
+        return b;
+    }
+
+    // the balls as the shooter's browser left them, the same ball objects keep their animations
+    function takeBalls(balls) {
+        players.forEach((p, i) => ballFrom(balls[i], p.ball));
+    }
+
+    // Takes the game as the server has it.
+    function snap(view) {
+        net.seq = view.seq;
+        net.replaying = null;
+        aim = null;
+        view.players.forEach((vp, i) => {
+            players[i].scores = vp.scores.slice();
+            players[i].left = vp.left;
+        });
+        if (view.status === 'finished' || view.turn === null) {
+            holeIndex = HOLES.length - 1;
+            finishRound();
+            return;
+        }
+        if (view.hole !== holeIndex) {
+            holeIndex = view.hole;
+            hole = prepareHole(HOLES[holeIndex]);
+            time = 0;
+            effects = [];
+            banner = {text: `Hole ${holeIndex + 1}: ${hole.name}`, sub: `Par ${hole.par}`, until: performance.now() + 2200};
+        }
+        players.forEach((p, i) => {
+            p.ball = ballFrom(view.balls[i]);
+        });
+        order = honourOrder(holeIndex);
+        turn = view.turn;
+        beginTurn();
+        renderScorecard();
+        updateNetControls();
+        if (view.me !== null && view.players[view.me].left) {
+            setStatus("You were skipped for taking too long. You can keep watching, though.");
+        }
+    }
+
+    function postShot() {
+        const n = net;
+        const body = {
+            seq: n.seq, hole: holeIndex, shot: n.lastShot,
+            balls: players.map(p => ({x: p.ball.x, y: p.ball.y, strokes: p.ball.strokes, sunk: p.ball.sunk})),
+        };
+        n.seq += 1;
+        n.epoch += 1;
+        n.posting = true;
+        api('POST', `${gamesUrl}/${n.id}/moves`, body).then(view => {
+            if (net === n) {
+                n.latest = view;
+            }
+        }).catch(error => {
+            if (net !== n) {
+                return;
+            }
+            failed('Sending your shot', error);
+            // start over from what the server has
+            n.seq = -1;
+            n.latest = null;
+        }).finally(() => {
+            n.posting = false;
+        });
+    }
+
     // ---------------------------------------------------------------- go
     addPlayerRow(me, true);
     if (courseMismatch) {
         setStatus(courseMismatch);
     }
     hole = prepareHole(HOLES[Math.floor(Math.random() * HOLES.length)]);
+    refreshGames();
     requestAnimationFrame(frame);
 })();

@@ -7,6 +7,13 @@ Bored while waiting for the next match? Hit *Minigolf* in the navigation: a 9 ho
 game (windmill included) for 1-4 players taking turns on one computer. Your rounds land in the
 shared Hall of Fame, so you can compete with everyone else at the party.
 
+Or play across the network: *Host a network game*, and up to three other registered players join it
+from their own computers. Everybody sees every putt roll, and every player's round goes into the
+Hall of Fame. A player who hasn't putted for 90 seconds can be skipped by the others.
+
+Balls knock each other around, but only your own putt can hole your ball: a ball knocked into the
+cup goes back to where it lay, and so does a ball knocked into the water, for one penalty stroke.
+
 ## Recommended Setup
 ### On macOS and Linux 
 - `python3 -m venv lol9k1env`

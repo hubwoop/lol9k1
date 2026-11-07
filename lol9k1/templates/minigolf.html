@@ -8,11 +8,14 @@
   <div id="minigolf" class="minigolf"
        data-player="{{ session.get('username') }}"
        data-submit-url="{{ url_for('minigolf.submit_round_api') }}"
+       data-leaderboard-url="{{ url_for('minigolf.leaderboard_api') }}"
+       data-games-url="{{ url_for('minigolf.games_api') }}"
+       data-max-players="{{ max_players }}"
        data-holes="{{ holes }}"
        data-max-strokes="{{ max_strokes }}">
     <div class="minigolfTitle">⛳ LOL 9001 MINIGOLF ⛳</div>
     <div class="minigolfStage">
-      <canvas id="minigolfCanvas" width="640" height="400" aria-label="Minigolf course"></canvas>
+      <canvas id="minigolfCanvas" width="{{ course_width }}" height="{{ course_height }}" aria-label="Minigolf course"></canvas>
 
       <div id="minigolfSetup" class="minigolfOverlay">
         <h3>Who's playing?</h3>
@@ -25,6 +28,22 @@
           Right click or <kbd>Esc</kbd> cancels a shot. Water costs a penalty stroke,
           {{ max_strokes }} strokes max per hole.
         </p>
+        <hr>
+        <h3>...or play over the network</h3>
+        <p class="minigolfHint">
+          Everybody on their own computer, up to {{ max_players }} players.
+          Every player's round goes into the Hall of Fame.
+        </p>
+        <ul id="minigolfGames" class="minigolfGames" aria-label="Network games"></ul>
+        <button type="button" id="minigolfHost" class="minigolfButton">Host a network game</button>
+      </div>
+
+      <div id="minigolfLobby" class="minigolfOverlay" hidden>
+        <h3 id="minigolfLobbyTitle">Network game</h3>
+        <p id="minigolfLobbyHint" class="minigolfHint"></p>
+        <ol id="minigolfLobbyPlayers" aria-label="Players in the lobby"></ol>
+        <button type="button" id="minigolfLobbyStart" class="minigolfButton minigolfButtonBig">Start the game</button>
+        <button type="button" id="minigolfLobbyLeave" class="minigolfButton">Leave</button>
       </div>
 
       <div id="minigolfResult" class="minigolfOverlay" hidden>
@@ -38,7 +57,11 @@
     </div>
     <div class="minigolfToolbar">
       <span id="minigolfStatus">Ready.</span>
-      <button type="button" id="minigolfSound" class="minigolfButton" aria-pressed="true">🔊 Sound</button>
+      <span>
+        <button type="button" id="minigolfSkip" class="minigolfButton" hidden>Skip</button>
+        <button type="button" id="minigolfLeave" class="minigolfButton" hidden>Leave game</button>
+        <button type="button" id="minigolfSound" class="minigolfButton" aria-pressed="true">🔊 Sound</button>
+      </span>
     </div>
 
     <table class="minigolfScorecard" id="minigolfScorecard">

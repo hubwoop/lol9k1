@@ -158,3 +158,28 @@
 .minigolfSwatch {
     text-shadow: 0 0 1px #000, 0 0 1px #000;
 }
+
+.minigolfOverlay hr {
+    margin: 10px 0;
+    border-top: 2px dashed #a1887f;
+}
+
+.minigolfGames {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 6px;
+}
+
+.minigolfGames li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px;
+    text-align: left;
+    border-bottom: 1px dotted #a1887f;
+}
+
+.minigolfButton[hidden] {
+    display: none;
+}
