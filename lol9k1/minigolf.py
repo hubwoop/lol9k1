@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
-from flask import Blueprint, render_template, request, session
+from flask import Blueprint, current_app, render_template, request, session
 
 from lol9k1 import events
 from lol9k1.auth import auth
@@ -311,9 +311,14 @@ class Game:
 
 
 def load_game(game_id: int) -> Optional[Game]:
+    """The game, None if there's no such game or it's on a course this server doesn't have (anymore)."""
     db = get_db()
     row = db.execute('select * from minigolf_games where id = ?', [game_id]).fetchone()
     if row is None:
+        return None
+    if row['course'] not in COURSES:
+        # a pack that was renamed or retired: without its holes the game can't be replayed
+        current_app.logger.warning('minigolf game %s is on the unknown course %r', game_id, row['course'])
         return None
     players = db.execute('''
       select p.user, u.name from minigolf_game_players p
@@ -415,7 +420,7 @@ def games_api():
     ''', [user, user, _timestamp(_now() - LOBBY_TTL), user]).fetchall()
     return json.dumps([{'id': r['id'], 'course': r['course'], 'status': r['status'], 'host': r['host'], 'players': json.loads(r['players']),
                         'joined': bool(r['joined'])}
-                       for r in rows if not r['left_game']])
+                       for r in rows if not r['left_game'] and r['course'] in COURSES])
 
 
 @bp.route('/api/games', methods=['POST'])

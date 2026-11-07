@@ -62,6 +62,16 @@ def test_unknown_packs_are_refused(page: Page, seed, alice):
     assert seed.query('select * from minigolf_games') == []
 
 
+def test_games_on_a_retired_pack_are_left_alone(page: Page, seed, alice):
+    login(page, alice)
+    gid = page.request.post('/minigolf/api/games', data={'course': 'brawl'}).json()['id']
+    seed.query("update minigolf_games set course = 'retired'")
+
+    # not offered anymore, and opening it is a 404 rather than a crash
+    assert page.request.get('/minigolf/api/games').json() == []
+    assert page.request.get(f'/minigolf/api/games/{gid}').status == 404
+
+
 def test_a_network_game_on_bumper_brawl(page: Page, seed, alice, bob, new_user_page):
     login(page, alice)
     page.goto('/minigolf/')

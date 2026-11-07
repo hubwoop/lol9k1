@@ -295,9 +295,10 @@ window.lol9k1MinigolfPacks = (function () {
         return SERVER_COURSES[id] ? SERVER_COURSES[id].name : id;
     }
 
+    // an unknown pack falls back to the classic one, the course and its holes always go together
     function usePack(id) {
-        course = id;
-        HOLES = PACKS[id] ? PACKS[id].holes : CLASSIC;
+        course = PACKS[id] ? id : 'classic';
+        HOLES = PACKS[course].holes;
     }
 
     // ---------------------------------------------------------------- dom
