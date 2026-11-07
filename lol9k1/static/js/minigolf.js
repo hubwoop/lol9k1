@@ -157,36 +157,44 @@ window.lol9k1MinigolfRules = (function () {
 
     // Everybody tees off from a side of their own and aims at the same cup, in the middle of things.
     // Knocking somebody into the water costs them a stroke, and a ball in the way is there to be cleared.
+    // No tee has a clear line to the cup: an ace takes a bank shot, and the first putts end up near
+    // the cup, where the others can knock them away.
     // Seats 0 and 1 tee off opposite each other, so a game of two is a duel too.
     const BRAWL = [
         {
-            name: 'Crossroads', par: 2,
+            name: 'Crossroads', par: 3,
             outline: [[140, 150], [270, 150], [270, 20], [370, 20], [370, 150], [500, 150], [500, 250],
                 [370, 250], [370, 380], [270, 380], [270, 250], [140, 250]],
+            // a bumper in every way in, so nobody goes straight for the cup
+            bumpers: [[270, 200, 12], [370, 200, 12], [320, 150, 12], [320, 250, 12]],
             starts: [[175, 200], [465, 200], [320, 55], [320, 345]], cup: [320, 200],
         },
         {
-            name: 'Pocket Pool', par: 2,
+            name: 'Pocket Pool', par: 3,
             outline: rect(40, 60, 560, 280),
             // the pockets: corners and the middle of the long sides
             water: [[40, 60, 40, 40], [560, 60, 40, 40], [40, 300, 40, 40], [560, 300, 40, 40],
                 [300, 60, 40, 26], [300, 314, 40, 26]],
-            starts: [[100, 200], [540, 200], [200, 130], [440, 270]], cup: [320, 200],
+            // the rack: a ring of bumpers around the cup, the gaps don't face any tee
+            bumpers: [0, 1, 2, 3, 4, 5].map(i => [320 + 36 * Math.cos(i * Math.PI / 3),
+                200 + 36 * Math.sin(i * Math.PI / 3), 7]),
+            starts: [[100, 200], [540, 200], [260, 96], [380, 304]], cup: [320, 200],
         },
         {
             name: 'Pinball Wizard', par: 3,
             outline: rect(40, 60, 560, 280),
             bumpers: [[265, 200, 12], [375, 200, 12], [320, 140, 16], [320, 260, 16],
-                [180, 120, 10], [460, 280, 10], [180, 280, 10], [460, 120, 10]],
+                [180, 120, 10], [460, 280, 10], [180, 280, 10], [460, 120, 10],
+                [230, 160, 9], [410, 240, 9]],
             starts: [[80, 200], [560, 200], [80, 110], [560, 290]], cup: [320, 200],
         },
         {
             name: 'Walk the Plank', par: 3,
             outline: rect(40, 60, 560, 280),
-            // planks from both sides lead to a tiny island with the cup
-            water: [[180, 60, 280, 110], [180, 230, 280, 110],
-                [180, 170, 110, 12], [180, 218, 110, 12], [350, 170, 110, 12], [350, 218, 110, 12]],
-            starts: [[90, 200], [550, 200], [90, 120], [550, 280]], cup: [320, 200],
+            // planks from both sides lead to an island with the cup, but not straight at it
+            water: [[180, 60, 280, 80], [180, 260, 280, 80],
+                [180, 140, 90, 10], [180, 180, 90, 80], [370, 140, 90, 80], [370, 250, 90, 10]],
+            starts: [[90, 165], [550, 235], [90, 100], [550, 300]], cup: [320, 200],
         },
         {
             name: 'Roundabout', par: 3,
@@ -198,11 +206,11 @@ window.lol9k1MinigolfRules = (function () {
         {
             name: 'Bottleneck', par: 3,
             outline: rect(40, 60, 560, 280),
-            // a funnel down to a gate just wide enough for one ball
+            // a funnel down to a gate just wide enough for one ball, the cup is off to the side behind it
             blocks: [[[300, 60], [390, 60], [390, 183]], [[300, 340], [390, 217], [390, 340]],
                 rect(390, 60, 20, 123), rect(390, 217, 20, 123)],
             water: [[560, 60, 40, 280]],
-            starts: [[90, 120], [90, 280], [90, 200], [160, 200]], cup: [500, 200],
+            starts: [[90, 120], [90, 280], [90, 200], [160, 200]], cup: [500, 130],
         },
         {
             name: 'Sumo', par: 3,
@@ -210,7 +218,7 @@ window.lol9k1MinigolfRules = (function () {
             // an island ring in a moat, two narrow bridges lead onto it
             water: [[140, 40, 360, 70], [140, 290, 360, 70],
                 [140, 110, 60, 72], [140, 218, 60, 72], [440, 110, 60, 72], [440, 218, 60, 72]],
-            bumpers: [[320, 150, 12], [320, 250, 12]],
+            bumpers: [[268, 200, 10], [372, 200, 10], [320, 150, 12], [320, 250, 12]],
             starts: [[80, 200], [560, 200], [80, 80], [560, 320]], cup: [320, 200],
         },
         {
@@ -222,14 +230,16 @@ window.lol9k1MinigolfRules = (function () {
                 {x: 170, y: 174, w: 16, h: 20, ax: 0, ay: 32, speed: 1.4, phase: 0},
                 {x: 454, y: 206, w: 16, h: 20, ax: 0, ay: -32, speed: 1.4, phase: 0},
             ],
-            starts: [[60, 200], [580, 200], [100, 200], [540, 200]], cup: [320, 200],
+            // the cup is up in the crossing, out of sight of the lanes
+            starts: [[60, 200], [580, 200], [100, 200], [540, 200]], cup: [320, 135],
         },
         {
             name: 'Mayhem', par: 3,
             outline: rect(40, 40, 560, 320),
             water: [[300, 40, 40, 30], [300, 330, 40, 30], [40, 180, 30, 40], [570, 180, 30, 40]],
             sand: [[150, 100, 60, 40], [430, 260, 60, 40], [430, 100, 60, 40], [150, 260, 60, 40]],
-            bumpers: [[320, 135, 13], [320, 265, 13], [245, 200, 13], [395, 200, 13]],
+            // one bumper on the line from every tee to the cup
+            bumpers: [[265, 174, 13], [375, 226, 13], [375, 174, 13], [265, 226, 13]],
             starts: [[90, 90], [550, 310], [550, 90], [90, 310]], cup: [320, 200],
         },
     ];

@@ -20,11 +20,11 @@ def test_bumper_brawl_can_be_played_hot_seat(page: Page, seed, alice):
     page.get_by_role('button', name='Tee off!').click()
     wait_for_turn(page)
 
-    # Crossroads: player 1 tees off 145px left of the cup in the middle
+    # Crossroads: a bumper is in the way of the straight putt at the cup, so it can't be aced like that
     putt(page, 300, 300, -45, 0)
 
-    expect(game(page)).to_have_attribute('data-hole', '2', timeout=20_000)
-    expect(page.locator('#minigolfScorecard tbody tr').nth(1).locator('td').first).to_have_text('1')
+    expect(page.locator('#minigolfStatus')).to_contain_text("Alice, it's your turn! Stroke 2.", timeout=20_000)
+    expect(game(page)).to_have_attribute('data-hole', '1')
 
 
 def test_every_pack_has_a_leaderboard_of_its_own(page: Page, seed, alice):
@@ -77,28 +77,27 @@ def test_a_network_game_on_bumper_brawl(page: Page, seed, alice, bob, new_user_p
     gid = game_id(seed)
     assert seed.query('select course from minigolf_games')[0]['course'] == 'brawl'
 
-    # Alice putts up against the wall, out of the way
+    # both putt up against the wall of their arm of the crossroads
     putt(page, 300, 300, 0, 30)
     expect(status(bob_page)).to_contain_text("Bob, it's your turn! Stroke 1.", timeout=20_000)
-    # Bob tees off on the other side of the cup, 145px right of it
-    putt(bob_page, 300, 300, 45, 0)
+    putt(bob_page, 300, 300, 0, 30)
     expect(status(page)).to_contain_text("Alice, it's your turn! Stroke 2.", timeout=20_000)
-    moves = seed.query('select data from minigolf_moves order by seq')
-    bob_ball = json.loads(moves[1]['data'])['balls'][1]
-    assert bob_ball['sunk'] is True
-    assert bob_ball['x'] > 320
+    balls = [json.loads(m['data'])['balls'] for m in seed.query('select data from minigolf_moves order by seq')]
+    # Alice tees off left of the cup in the middle, Bob on the other side
+    assert balls[0][0]['x'] < 270
+    assert balls[1][1]['x'] > 370
 
-    # the rest of the game played by the API: Alice holes out, then Bob takes one and Alice two on every hole
-    assert shot(page, gid, 2, 0, [holed(2), holed(1)]).status == 201
-    seq = 3
+    # the rest of the game played by the API: both hole out in two on every hole, so Alice always goes first
+    assert shot(page, gid, 2, 0, [holed(2), balls[1][1]]).status == 201
+    assert shot(bob_page, gid, 3, 0, [holed(2), holed(2)]).status == 201
+    seq = 4
     for hole in range(1, 9):
-        # Bob has the honour, he did better on the hole before
-        assert shot(bob_page, gid, seq, hole, [not_played(), holed(1)]).status == 201
-        assert shot(page, gid, seq + 1, hole, [holed(2), holed(1)]).status == 201
+        assert shot(page, gid, seq, hole, [holed(2), not_played()]).status == 201
+        assert shot(bob_page, gid, seq + 1, hole, [holed(2), holed(2)]).status == 201
         seq += 2
 
     expect(bob_page.locator('#minigolfResult')).to_be_visible(timeout=10_000)
     expect(bob_page.locator('#minigolfBoardCourse')).to_have_text('Bumper Brawl')
     rows = seed.query('select user, course, strokes from minigolf_rounds order by user')
     assert [(r['user'], r['course'], json.loads(r['strokes'])) for r in rows] == \
-        [(alice.id, 'brawl', [2] * 9), (bob.id, 'brawl', [1] * 9)]
+        [(alice.id, 'brawl', [2] * 9), (bob.id, 'brawl', [2] * 9)]
