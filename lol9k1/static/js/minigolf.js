@@ -26,10 +26,6 @@ window.lol9k1MinigolfRules = (function () {
         },
 
         /**
-         * How a ball too fast to drop is pulled towards the centre of the cup, as a velocity change.
-         * (dx, dy) points from the ball to the centre. Dead centre there is no direction to pull in.
-         */
-        /**
          * Where a ball goes back to after a splash or after being knocked into the cup. The shooter's ball
          * goes back to where it was putted from. Anybody else's goes back to where it lay before this shot.
          */
@@ -37,6 +33,10 @@ window.lol9k1MinigolfRules = (function () {
             return isShooter ? {x: ball.lastX, y: ball.lastY} : {x: ball.shotX, y: ball.shotY};
         },
 
+        /**
+         * How a ball too fast to drop is pulled towards the centre of the cup, as a velocity change.
+         * (dx, dy) points from the ball to the centre. Dead centre there is no direction to pull in.
+         */
         cupPull(dx, dy, dt) {
             const d = Math.sqrt(dx * dx + dy * dy);
             if (d <= 1e-6) {
