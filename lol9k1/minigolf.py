@@ -18,6 +18,8 @@ MAX_STROKES = 10  # per hole, a ball that isn't holed by then scores this
 LEADERBOARD_SIZE = 10
 
 # Every finished round of the course with its total, the base of both leaderboards.
+# A module constant that's put into the queries below as a CTE, never user input: their values
+# go in as ? parameters.
 ROUNDS = '''
       select r.id, r.user, u.name, r.played_at, (select sum(s.value) from json_each(r.strokes) s) as total
       from minigolf_rounds r

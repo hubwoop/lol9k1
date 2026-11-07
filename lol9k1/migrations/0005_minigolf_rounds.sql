@@ -1,5 +1,7 @@
 -- Finished minigolf rounds, for the leaderboard.
 -- The total of a round is computed from its strokes, so the two can't disagree.
+-- The check only makes sure strokes is a JSON array. That its items are stroke counts, and
+-- that there's one per hole, is validated by the app (minigolf.submit_round_api), the only writer.
 create table minigolf_rounds
 (
   id        integer primary key autoincrement,
