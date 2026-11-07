@@ -23,6 +23,15 @@ Pick a map pack before you tee off or host a game, every pack has a Hall of Fame
   Every tee of a hole is as good as the others: they are mirror images of each other, and with more
   players than tees, players share them.
 
+### Map editor 🛠
+Building holes? Open the *Map editor* below the game (`/minigolf/editor`). Load a pack or start a new
+one, place walls, sand, water, boosts, bumpers, sliders and windmills, drag them around and resize
+them by their handles, and hit *Test* to putt the hole with the real game (nothing gets saved). Checks
+point out tees and cups off the fairway and tees that aren't as good as the others, the mirror
+buttons make the copies that fix that. Your work stays in your browser, with undo. *Copy pack* gives
+you the code to paste into `lol9k1/static/js/minigolf.js` and `lol9k1/minigolf.py`, *Import* reads
+holes back in.
+
 ## Recommended Setup
 ### On macOS and Linux 
 - `python3 -m venv lol9k1env`

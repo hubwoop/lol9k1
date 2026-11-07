@@ -71,6 +71,16 @@ def minigolf() -> str:
                            best=board['best'], recent=board['recent'])
 
 
+@bp.route('/editor')
+@auth.login_required
+def editor() -> str:
+    """The map editor: build holes, test play them and export them for static/js/minigolf.js.
+    It all happens in the browser, nothing is saved on the server."""
+    return render_template('minigolf_editor.html', page_title='Minigolf map editor', courses=COURSES, course=COURSE,
+                           max_strokes=MAX_STROKES, max_players=MAX_PLAYERS,
+                           course_width=COURSE_WIDTH, course_height=COURSE_HEIGHT)
+
+
 @bp.route('/api/rounds', methods=['POST'])
 @auth.login_required(api=True)
 def submit_round_api():

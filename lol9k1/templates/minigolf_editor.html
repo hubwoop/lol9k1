@@ -1,0 +1,133 @@
+{% extends "layout.html" %}
+{% block title %}Minigolf map editor{% endblock %}
+{% block head %}
+  {{ super() }}
+  <link rel=stylesheet type=text/css href="{{ url_for('static', filename='css/minigolf.css') }}">
+{% endblock %}
+{% block body %}
+  <div id="minigolfEditor" class="minigolfEditor"
+       data-width="{{ course_width }}" data-height="{{ course_height }}"
+       data-courses="{{ courses|tojson|forceescape }}">
+    <div class="mgeToolbar" role="toolbar" aria-label="Editor tools">
+      <span class="mgeTools" id="mgeTools">
+        <button type="button" class="minigolfButton" data-tool="select" title="Select and move things, drag their handles (V)">↖ Select</button>
+        <button type="button" class="minigolfButton" data-tool="starts" title="Click to place a tee (E)">Tee</button>
+        <button type="button" class="minigolfButton" data-tool="blocks" title="Click to place a wall block (B)">Block</button>
+        <button type="button" class="minigolfButton" data-tool="sand" title="Click to place sand (S)">Sand</button>
+        <button type="button" class="minigolfButton" data-tool="water" title="Click to place water (W)">Water</button>
+        <button type="button" class="minigolfButton" data-tool="boosts" title="Click to place a boost (O)">Boost</button>
+        <button type="button" class="minigolfButton" data-tool="bumpers" title="Click to place a bumper (U)">Bumper</button>
+        <button type="button" class="minigolfButton" data-tool="sliders" title="Click to place a sliding wall (L)">Slider</button>
+        <button type="button" class="minigolfButton" data-tool="rotors" title="Click to place windmill blades (M)">Windmill</button>
+      </span>
+      <span class="mgeTools">
+        <button type="button" class="minigolfButton" id="mgeUndo" title="Ctrl+Z">↶ Undo</button>
+        <button type="button" class="minigolfButton" id="mgeRedo" title="Ctrl+Shift+Z">↷ Redo</button>
+        <label>Snap
+          <select id="mgeSnap">
+            <option value="0">off</option>
+            <option value="5">5px</option>
+            <option value="10" selected>10px</option>
+            <option value="20">20px</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="mgeGrid" checked> Grid</label>
+        <label><input type="checkbox" id="mgeAxes"> Axes</label>
+      </span>
+      <span class="mgeTools">
+        <label>Players
+          <select id="mgePlayers">
+            {% for n in range(1, max_players + 1) %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+          </select>
+        </label>
+        <button type="button" class="minigolfButton minigolfButtonBig" id="mgeTest" title="Play the hole (T)">▶ Test</button>
+      </span>
+    </div>
+
+    <div class="mgeMain">
+      <div class="mgeStageColumn">
+        {% with editor=True %}{% include '_minigolf_game.html' %}{% endwith %}
+        <div class="mgeCoords" id="mgeCoords">&nbsp;</div>
+      </div>
+
+      <fieldset class="mgeSide" id="mgeSide">
+        <section>
+          <h4>Map pack</h4>
+          <p class="mgeRow">
+            <select id="mgeLoadPack" aria-label="Pack to load">
+              {% for id, c in courses.items() %}<option value="{{ id }}">{{ c.name }}</option>{% endfor %}
+              <option value="">A new pack</option>
+            </select>
+            <button type="button" class="minigolfButton" id="mgeLoad">Load</button>
+          </p>
+          <p class="mgeRow"><label for="mgePackId">Id</label> <input id="mgePackId" type="text" maxlength="32"></p>
+          <p class="mgeRow"><label for="mgePackName">Name</label> <input id="mgePackName" type="text" maxlength="40"></p>
+          <p class="mgeRow"><label for="mgePackHint">Hint</label> <input id="mgePackHint" type="text"></p>
+          <ol id="mgeHoles" class="mgeHoles" aria-label="Holes"></ol>
+          <p id="mgePackNote" class="mgePackNote"></p>
+          <p class="mgeRow">
+            <button type="button" class="minigolfButton" id="mgeAddHole">+ New hole</button>
+            <button type="button" class="minigolfButton" id="mgeDuplicateHole">Duplicate</button>
+            <button type="button" class="minigolfButton" id="mgeDeleteHole">Delete</button>
+            <button type="button" class="minigolfButton" id="mgeHoleUp" aria-label="Move the hole up">↑</button>
+            <button type="button" class="minigolfButton" id="mgeHoleDown" aria-label="Move the hole down">↓</button>
+          </p>
+        </section>
+        <section>
+          <h4>Hole</h4>
+          <p class="mgeRow"><label for="mgeHoleName">Name</label> <input id="mgeHoleName" type="text" maxlength="40"></p>
+          <p class="mgeRow"><label for="mgeHolePar">Par</label> <input id="mgeHolePar" type="number" min="1" max="10" step="1"></p>
+          <p class="mgeRow"><label><input type="checkbox" id="mgeHoleHouse"> Blocks are a windmill house</label></p>
+        </section>
+        <section>
+          <h4>Selected</h4>
+          <div id="mgeSelection"></div>
+        </section>
+        <section>
+          <h4>Checks</h4>
+          <ul id="mgeChecks" class="mgeChecks" aria-label="Checks"></ul>
+        </section>
+      </fieldset>
+    </div>
+
+    <div class="mgeExport">
+      <div>
+        <h4>Export</h4>
+        <p class="mgeRow">
+          <button type="button" class="minigolfButton" id="mgeExportHole">Copy hole</button>
+          <button type="button" class="minigolfButton" id="mgeExportPack">Copy pack</button>
+          <span id="mgeExportMessage" class="minigolfHint"></span>
+        </p>
+        <textarea id="mgeExportText" rows="10" readonly aria-label="Exported code" spellcheck="false"></textarea>
+      </div>
+      <div>
+        <h4>Import</h4>
+        <p class="mgeRow">
+          <button type="button" class="minigolfButton" id="mgeImport">Import</button>
+          <span id="mgeImportMessage" class="minigolfHint"></span>
+        </p>
+        <textarea id="mgeImportText" rows="10" aria-label="Code to import" spellcheck="false"
+                  placeholder="Paste a hole or a list of holes, as exported or as they are in minigolf.js"></textarea>
+      </div>
+    </div>
+
+    <div class="mgeHelp minigolfHint">
+      <p>
+        Pick a tool and click the course to place things, then drag them around with <b>Select</b>.
+        Drag the handles to resize, a polygon's midpoint handles add a corner. Click the fairway to edit the outline.
+        <kbd>Del</kbd> removes what's selected, <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates it, arrow keys nudge it
+        (with <kbd>Shift</kbd> by one pixel). <kbd>[</kbd> and <kbd>]</kbd> go to the previous and next hole,
+        <kbd>T</kbd> starts and stops a test run.
+      </p>
+      <p>
+        Your work stays in this browser. When you're happy, <b>Copy pack</b> and paste the code into
+        <code>lol9k1/static/js/minigolf.js</code> (the holes) and <code>lol9k1/minigolf.py</code> (the number of holes).
+      </p>
+      <p><a href="{{ url_for('minigolf.minigolf') }}">⛳ Back to the game</a></p>
+    </div>
+  </div>
+{% endblock %}
+{% block endofbody %}
+  <script src="{{ url_for('static', filename='js/minigolf.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/minigolf_editor.js') }}"></script>
+{% endblock %}
