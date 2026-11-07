@@ -35,7 +35,11 @@ MIN_NETWORK_PLAYERS = 2
 TURN_TIMEOUT = timedelta(seconds=90)
 # lobbies nobody started for this long aren't offered for joining anymore
 LOBBY_TTL = timedelta(hours=2)
-MAX_PENALTIES = 20  # per ball and shot, a sanity limit for splashes
+MAX_PENALTIES = 20  # for the shooter's ball per shot, a sanity limit for splashes
+# the course is as big as the canvas it's drawn on, balls can't be anywhere else
+COURSE_WIDTH = 640
+COURSE_HEIGHT = 400
+MAX_SHOT_TIME = 24 * 60 * 60  # seconds on the course clock, which starts over on every hole
 
 # Every finished round of the course with its total, the base of both leaderboards.
 # A module constant that's put into the queries below as a CTE, never user input: their values
@@ -53,7 +57,8 @@ ROUNDS = '''
 def minigolf() -> str:
     board = leaderboard()
     return render_template('minigolf.html', page_title='Minigolf', holes=HOLES, max_strokes=MAX_STROKES,
-                           max_players=MAX_PLAYERS, best=board['best'], recent=board['recent'])
+                           max_players=MAX_PLAYERS, course_width=COURSE_WIDTH, course_height=COURSE_HEIGHT,
+                           best=board['best'], recent=board['recent'])
 
 
 @bp.route('/api/rounds', methods=['POST'])
@@ -193,13 +198,18 @@ class GameState:
             if not isinstance(new, dict):
                 raise ValueError('a ball must be an object')
             x, y, strokes, sunk = new.get('x'), new.get('y'), new.get('strokes'), new.get('sunk')
-            if not all(_is_number(v) for v in (x, y)):
-                raise ValueError('the position of a ball must be numbers')
+            if not (_is_number(x) and 0 <= x <= COURSE_WIDTH and _is_number(y) and 0 <= y <= COURSE_HEIGHT):
+                raise ValueError('a ball must be on the course')
             if type(strokes) is not int or type(sunk) is not bool:
                 raise ValueError('strokes must be an integer and sunk a boolean')
-            least = old['strokes'] + (1 if shooter else 0)
-            if not least <= strokes <= least + MAX_PENALTIES:
+            # the shooter takes a stroke and maybe penalties. Somebody else's ball can only be
+            # knocked into the water, once, and can't be holed for them.
+            least, most = (old['strokes'] + 1, old['strokes'] + 1 + MAX_PENALTIES) if shooter \
+                else (old['strokes'], old['strokes'] + 1)
+            if not least <= strokes <= most:
                 raise ValueError(f'ball {i} can\'t have taken {strokes} strokes')
+            if sunk and not shooter:
+                raise ValueError("only the shooter's ball can be holed")
             out = shooter and not sunk and strokes >= MAX_STROKES
             kept.append({'x': x, 'y': y, 'strokes': min(strokes, MAX_STROKES) if out else strokes,
                          'sunk': sunk, 'out': out, 'on': True})
@@ -228,8 +238,10 @@ def _shot_params(shot) -> dict:
     if not isinstance(shot, dict):
         raise ValueError('shot must be an object')
     params = {k: shot.get(k) for k in ('power', 'dx', 'dy', 'time')}
-    if not all(_is_number(v) for v in params.values()) or not 0 <= params['power'] <= 1:
-        raise ValueError('shot must have a power between 0 and 1, a direction dx, dy and a time')
+    if (not all(_is_number(v) for v in params.values()) or not 0 <= params['power'] <= 1
+            or abs(math.hypot(params['dx'], params['dy']) - 1) > 1e-6 or not 0 <= params['time'] <= MAX_SHOT_TIME):
+        raise ValueError('shot must have a power between 0 and 1, a direction dx, dy of length 1 '
+                         f'and a time between 0 and {MAX_SHOT_TIME}')
     return params
 
 
@@ -320,17 +332,17 @@ def game_view(game: Game, since: int = 0) -> dict:
     return view
 
 
+class _ApiError(Exception):
+    def __init__(self, message: str, status: int):
+        super().__init__(message)
+        self.status = status
+
+
 def _game_or_404(game_id: int) -> Game:
     game = load_game(game_id)
     if game is None:
         raise _ApiError('no such game', 404)
     return game
-
-
-class _ApiError(Exception):
-    def __init__(self, message: str, status: int):
-        super().__init__(message)
-        self.status = status
 
 
 @bp.errorhandler(_ApiError)
@@ -377,6 +389,12 @@ def games_api():
 @auth.login_required(api=True)
 def create_game_api():
     db = get_db()
+    # lobbies nobody started in time aren't offered anymore, so they can go. Played games are kept
+    # with their moves, it's one row per putt and a LAN party doesn't putt that much.
+    stale = _timestamp(_now() - LOBBY_TTL)
+    db.execute('''delete from minigolf_game_players where game in (
+                    select id from minigolf_games where status = 'lobby' and created_at < ?)''', [stale])
+    db.execute("delete from minigolf_games where status = 'lobby' and created_at < ?", [stale])
     cursor = db.execute('insert into minigolf_games (course, host, status, created_at) values (?, ?, ?, ?)',
                         [COURSE, session.get('user_id'), 'lobby', _timestamp(_now())])
     db.execute('insert into minigolf_game_players (game, user) values (?, ?)', [cursor.lastrowid, session.get('user_id')])

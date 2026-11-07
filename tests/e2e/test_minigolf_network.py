@@ -36,9 +36,9 @@ def game_id(seed) -> int:
     return seed.query('select id from minigolf_games order by id desc limit 1')[0]['id']
 
 
-def shot(page: Page, gid: int, seq: int, hole: int, balls: list):
+def shot(page: Page, gid: int, seq: int, hole: int, balls: list, **params):
     return page.request.post(f'/minigolf/api/games/{gid}/moves', data={
-        'seq': seq, 'hole': hole, 'shot': {'power': 0.5, 'dx': 1, 'dy': 0, 'time': 1.5}, 'balls': balls})
+        'seq': seq, 'hole': hole, 'shot': {'power': 0.5, 'dx': 1, 'dy': 0, 'time': 1.5, **params}, 'balls': balls})
 
 
 def holed(strokes):
@@ -179,6 +179,27 @@ def test_leaving_a_running_game_passes_the_turn_on(page: Page, alice, bob, new_u
     expect(bob_page.locator('#minigolfScorecard')).to_contain_text('Alice (left)')
 
 
+def test_a_game_everybody_left_ends_without_a_winner(page: Page, seed, alice, bob, new_user_page):
+    login(page, alice)
+    host_game(page)
+    bob_page = new_user_page(bob)
+    join_game(bob_page, 'Alice')
+    start_game(page)
+    long_ago = (datetime.now() - timedelta(minutes=3)).isoformat(timespec='seconds')
+    seed.query('update minigolf_games set started_at = ?', [long_ago])
+    bob_page.get_by_role('button', name='Skip Alice').click()
+    expect(status(page)).to_contain_text('You were skipped', timeout=10_000)
+
+    bob_page.once('dialog', lambda dialog: dialog.accept())
+    bob_page.get_by_role('button', name='Leave game').click()
+
+    # Alice kept watching
+    expect(page.locator('#minigolfResult')).to_be_visible(timeout=10_000)
+    expect(status(page)).to_contain_text('Everybody left, so nobody wins.')
+    expect(page.locator('#minigolfSaved')).to_contain_text('no rounds were saved')
+    assert seed.query('select * from minigolf_rounds') == []
+
+
 def test_the_host_leaving_the_lobby_calls_the_game_off(page: Page, seed, alice, bob, new_user_page):
     login(page, alice)
     host_game(page)
@@ -211,6 +232,8 @@ def test_moves_that_dont_fit_the_game_are_refused(page: Page, seed, alice, bob, 
     assert shot(page, gid, 0, 1, [holed(1), not_played()]).status == 409           # wrong hole
     assert shot(page, gid, 0, 0, [not_played(), not_played()]).status == 400       # no stroke taken
     assert shot(page, gid, 0, 0, [holed(1)]).status == 400                         # a ball missing
+    assert shot(page, gid, 0, 0, [holed(1), not_played()], dx=1e9).status == 400  # not a direction
+    assert shot(page, gid, 0, 0, [holed(1), not_played()], time=-1).status == 400
     assert seed.query('select * from minigolf_moves') == []
 
     assert shot(page, gid, 0, 0, [holed(1), not_played()]).status == 201

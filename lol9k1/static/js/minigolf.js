@@ -303,7 +303,9 @@ window.lol9k1MinigolfRules = (function () {
     }
 
     function newBall() {
-        return {x: 0, y: 0, vx: 0, vy: 0, lastX: 0, lastY: 0, onCourse: false, sunk: false, out: false,
+        // lastX/Y: where its player last putted it from. shotX/Y: where it lay when the current shot began.
+        return {x: 0, y: 0, vx: 0, vy: 0, lastX: 0, lastY: 0, shotX: 0, shotY: 0, penalized: false,
+            onCourse: false, sunk: false, out: false,
             strokes: 0, moving: false, sinkAnim: 0};
     }
 
@@ -379,6 +381,11 @@ window.lol9k1MinigolfRules = (function () {
     function shoot(power, dirX, dirY) {
         const p = players[turn];
         const b = p.ball;
+        players.forEach(other => {
+            other.ball.shotX = other.ball.x;
+            other.ball.shotY = other.ball.y;
+            other.ball.penalized = false;
+        });
         b.lastX = b.x;
         b.lastY = b.y;
         b.vx = dirX * power * MAX_SPEED;
@@ -547,7 +554,11 @@ window.lol9k1MinigolfRules = (function () {
             let speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
             if (cd < CUP_R - 2) {
                 if (speed < SINK_SPEED) {
-                    sink(b);
+                    if (b === players[turn].ball) {
+                        sink(b);
+                    } else {
+                        knockedIn(b);
+                    }
                     return;
                 }
                 // too fast: the cup pulls at the ball and it lips out
@@ -587,10 +598,27 @@ window.lol9k1MinigolfRules = (function () {
         b.y = b.lastY;
         b.vx = b.vy = 0;
         b.moving = false;
-        b.strokes += 1; // penalty
         const owner = players.find(p => p.ball === b);
-        banner = {text: 'SPLASH!', sub: `${owner.name}: +1 penalty stroke`, until: performance.now() + 1400};
+        // somebody else's putt costs a ball one penalty stroke at most (the server holds them to that)
+        const penalty = owner === players[turn] || !b.penalized;
+        if (penalty) {
+            b.strokes += 1;
+            b.penalized = true;
+        }
+        banner = {text: 'SPLASH!', sub: penalty ? `${owner.name}: +1 penalty stroke` : `${owner.name}: back where it was putted from`,
+            until: performance.now() + 1400};
         renderScorecard();
+    }
+
+    // Only the player putting can hole out. A ball knocked into the cup goes back to where it lay.
+    function knockedIn(b) {
+        b.x = b.shotX;
+        b.y = b.shotY;
+        b.vx = b.vy = 0;
+        b.moving = false;
+        const owner = players.find(p => p.ball === b);
+        banner = {text: 'Nice try!', sub: `${owner.name}'s ball goes back, you can't hole out for them`,
+            until: performance.now() + 1600};
     }
 
     function sink(b) {
@@ -1190,7 +1218,9 @@ window.lol9k1MinigolfRules = (function () {
         });
         result.hidden = false;
         const winners = ranking.filter(p => total(p) === total(ranking[0]));
-        if (ranking.length === 1) {
+        if (!ranking.length) {
+            setStatus('Everybody left, so nobody wins.');
+        } else if (ranking.length === 1) {
             setStatus(`Round finished: ${total(ranking[0])} strokes.`);
         } else if (winners.length > 1) {
             setStatus(`It's a tie! ${winners.map(p => p.name).join(' & ')} share the win.`);
@@ -1200,7 +1230,8 @@ window.lol9k1MinigolfRules = (function () {
         if (net) {
             // the server saved everybody's rounds when the last ball dropped
             clearTimeout(net.pollTimer);
-            document.getElementById('minigolfSaved').textContent = "Everybody's rounds went into the Hall of Fame.";
+            document.getElementById('minigolfSaved').textContent = ranking.length
+                ? "Everybody's rounds went into the Hall of Fame." : 'Nobody finished, so no rounds were saved.';
             api('GET', root.dataset.leaderboardUrl).then(renderLeaderboard).catch(error =>
                 console.error('Loading the minigolf leaderboard failed:', error));
         } else {

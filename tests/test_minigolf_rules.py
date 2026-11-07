@@ -74,6 +74,8 @@ def test_only_the_player_whose_turn_it_is_can_shoot():
     [{**ball(1), 'strokes': 1.0}, ball(0)],
     [{**ball(1), 'sunk': 1}, ball(0)],
     [ball(30), ball(0)],
+    [ball(1, x=-1), ball(0)],               # off the course
+    [ball(1, y=9e9), ball(0)],
     'nope',
 ])
 def test_impossible_balls_are_refused(balls):
@@ -129,3 +131,13 @@ def test_the_game_ends_after_the_last_hole():
     assert state.scores == [[1, 1, 1, 1, 1, 1, 1, 1, 1], [2, 2, 2, 2, 2, 2, 2, 2, 2]]
     with pytest.raises(MoveError):
         shoot(state, 0, 1)
+
+
+def test_somebody_elses_ball_cant_be_holed_or_given_more_than_one_penalty():
+    state = GameState.new(2)
+    shoot(state, 0, 1)
+    shoot(state, 1, 1)
+    for rival in (ball(1, sunk=True), ball(3), ball(1, x=-9e9)):
+        with pytest.raises(ValueError):
+            state.shot(0, 0, [ball(2), rival])
+    assert state.turn == 0
