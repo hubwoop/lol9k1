@@ -36,6 +36,8 @@ COURSE = 'classic'  # the default
 HOLES = COURSES[COURSE]['holes']
 MAX_STROKES = 10  # per hole, a ball that isn't holed by then scores this
 LEADERBOARD_SIZE = 10
+# per game, hot seat and network alike. The tees are shared once there are more players than a hole has,
+# and the script has a colour for up to 8 players.
 MAX_PLAYERS = 4
 MIN_NETWORK_PLAYERS = 2
 # the others may skip a player who hasn't putted for this long, so a closed laptop can't stall a game

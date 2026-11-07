@@ -20,6 +20,8 @@ Pick a map pack before you tee off or host a game, every pack has a Hall of Fame
   different side and goes for the same cup, across narrow planks over the water, through a gate
   just wide enough for one ball, around pinball bumpers that kick balls away, on a pool table with
   pockets. Knock the others into the water, or clear their ball out of your way.
+  Every tee of a hole is as good as the others: they are mirror images of each other, and with more
+  players than tees, players share them.
 
 ## Recommended Setup
 ### On macOS and Linux 

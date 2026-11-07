@@ -47,43 +47,22 @@ window.lol9k1MinigolfRules = (function () {
     };
 })();
 
-(function () {
+/*
+ * The map packs, by id: their holes and a hint shown when the pack is picked. Plain data,
+ * so it can be checked without playing it (tests/e2e/test_minigolf_packs.py).
+ */
+window.lol9k1MinigolfPacks = (function () {
     'use strict';
 
-    const root = document.getElementById('minigolf');
-    if (!root) {
-        return;
-    }
-    const rules = window.lol9k1MinigolfRules;
-
-    // ---------------------------------------------------------------- constants
-    // the course is as big as the canvas is in the page
-    const W = document.getElementById('minigolfCanvas').width;
-    const H = document.getElementById('minigolfCanvas').height;
-    const BALL_R = 6;
-    const WALL_R = BALL_R + 4;      // walls are drawn 8px thick
-    const CUP_R = 10;
-    const MAX_STROKES = parseInt(root.dataset.maxStrokes, 10) || 10;
-    const MAX_DRAG = 130;           // px of pull for a full power shot
-    const MAX_SPEED = 950;          // px/s
-    const DT = 1 / 240;             // physics step
-    const RESTITUTION = 0.75;
-    const DRAG = 0.9;               // exponential slow down per second
-    const ROLL = 80;                // constant rolling resistance px/s²
-    const SAND_DRAG = 3.5, SAND_ROLL = 420;
-    const BOOST_ACC = 1100;
-    const STOP_SPEED = 7;
-    const SINK_SPEED = 430;         // faster than this and the ball lips out
-    const BUMPER_KICK = 240;        // px/s a bumper adds to a ball bouncing off it
-    const COLORS = ['#ffffff', '#ffeb3b', '#ff7043', '#4fc3f7'];
-
-    // ---------------------------------------------------------------- course
     function rect(x, y, w, h) {
         return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
     }
 
-    // A hole has an outline (the outer wall) and a tee, either one start for everybody or starts, one per
-    // seat (player 1, 2, ...), so the players come at the cup from different sides and run into each other.
+    // A hole has an outline (the outer wall) and a tee, either one start for everybody or several starts,
+    // so the players come at the cup from different sides and run into each other. Seat i (player i + 1)
+    // tees off from starts[i % starts.length], so with more players than starts they share them.
+    // The starts have to be equally good: a mirror or a rotation of the hole that leaves it as it is takes
+    // every start to every other one (checked by tests/e2e/test_minigolf_packs.py).
     // In it: blocks (walls), sand and water and boosts (rects, a boost with its direction), rotors (windmill
     // blades), sliders (moving walls) and bumpers ([x, y, radius], they kick a ball away).
     const CLASSIC = [
@@ -159,7 +138,7 @@ window.lol9k1MinigolfRules = (function () {
     // Knocking somebody into the water costs them a stroke, and a ball in the way is there to be cleared.
     // No tee has a clear line to the cup: an ace takes a bank shot, and the first putts end up near
     // the cup, where the others can knock them away.
-    // Seats 0 and 1 tee off opposite each other, so a game of two is a duel too.
+    // Starts 0 and 1 are opposite each other, so a game of two is a duel too.
     const BRAWL = [
         {
             name: 'Crossroads', par: 3,
@@ -175,33 +154,35 @@ window.lol9k1MinigolfRules = (function () {
             // the pockets: corners and the middle of the long sides
             water: [[40, 60, 40, 40], [560, 60, 40, 40], [40, 300, 40, 40], [560, 300, 40, 40],
                 [300, 60, 40, 26], [300, 314, 40, 26]],
-            // the rack: a ring of bumpers around the cup, the gaps don't face any tee
-            bumpers: [0, 1, 2, 3, 4, 5].map(i => [320 + 36 * Math.cos(i * Math.PI / 3),
-                200 + 36 * Math.sin(i * Math.PI / 3), 7]),
-            starts: [[100, 200], [540, 200], [260, 96], [380, 304]], cup: [320, 200],
+            // the rack: a ring of bumpers around the cup, one of them in line with every tee
+            bumpers: [30, 90, 150, 210, 270, 330].map(a => [320 + 36 * Math.cos(a * Math.PI / 180),
+                200 + 36 * Math.sin(a * Math.PI / 180), 7]),
+            starts: [[147, 100], [493, 300], [493, 100], [147, 300]], cup: [320, 200],
         },
         {
             name: 'Pinball Wizard', par: 3,
             outline: rect(40, 60, 560, 280),
             bumpers: [[265, 200, 12], [375, 200, 12], [320, 140, 16], [320, 260, 16],
                 [180, 120, 10], [460, 280, 10], [180, 280, 10], [460, 120, 10],
-                [230, 160, 9], [410, 240, 9]],
-            starts: [[80, 200], [560, 200], [80, 110], [560, 290]], cup: [320, 200],
+                [230, 160, 9], [410, 240, 9], [410, 160, 9], [230, 240, 9]],
+            starts: [[85, 105], [555, 295], [555, 105], [85, 295]], cup: [320, 200],
         },
         {
             name: 'Walk the Plank', par: 3,
             outline: rect(40, 60, 560, 280),
-            // planks from both sides lead to an island with the cup, but not straight at it
+            // two planks from each side lead to an island with the cup, but not straight at it
             water: [[180, 60, 280, 80], [180, 260, 280, 80],
-                [180, 140, 90, 10], [180, 180, 90, 80], [370, 140, 90, 80], [370, 250, 90, 10]],
-            starts: [[90, 165], [550, 235], [90, 100], [550, 300]], cup: [320, 200],
+                [180, 140, 90, 10], [180, 180, 90, 40], [180, 250, 90, 10],
+                [370, 140, 90, 10], [370, 180, 90, 40], [370, 250, 90, 10]],
+            starts: [[90, 165], [550, 235], [550, 165], [90, 235]], cup: [320, 200],
         },
         {
             name: 'Roundabout', par: 3,
             outline: rect(40, 40, 560, 320),
             blocks: [rect(180, 140, 280, 120)],
             bumpers: [[230, 90, 11], [410, 90, 11]],
-            starts: [[110, 200], [530, 200], [110, 310], [530, 310]], cup: [320, 90],
+            // the cup is up top, so there's only a left and a right way round
+            starts: [[110, 200], [530, 200]], cup: [320, 90],
         },
         {
             name: 'Bottleneck', par: 3,
@@ -210,7 +191,8 @@ window.lol9k1MinigolfRules = (function () {
             blocks: [[[300, 60], [390, 60], [390, 183]], [[300, 340], [390, 217], [390, 340]],
                 rect(390, 60, 20, 123), rect(390, 217, 20, 123)],
             water: [[560, 60, 40, 280]],
-            starts: [[90, 120], [90, 280], [90, 200], [160, 200]], cup: [500, 130],
+            // everybody tees off from the same spot and goes for the same gate
+            start: [90, 200], cup: [500, 130],
         },
         {
             name: 'Sumo', par: 3,
@@ -219,7 +201,7 @@ window.lol9k1MinigolfRules = (function () {
             water: [[140, 40, 360, 70], [140, 290, 360, 70],
                 [140, 110, 60, 72], [140, 218, 60, 72], [440, 110, 60, 72], [440, 218, 60, 72]],
             bumpers: [[268, 200, 10], [372, 200, 10], [320, 150, 12], [320, 250, 12]],
-            starts: [[80, 200], [560, 200], [80, 80], [560, 320]], cup: [320, 200],
+            starts: [[80, 120], [560, 280], [560, 120], [80, 280]], cup: [320, 200],
         },
         {
             name: 'Head-On', par: 3,
@@ -228,10 +210,10 @@ window.lol9k1MinigolfRules = (function () {
             water: [[260, 110, 30, 30], [350, 110, 30, 30], [260, 260, 30, 30], [350, 260, 30, 30]],
             sliders: [
                 {x: 170, y: 174, w: 16, h: 20, ax: 0, ay: 32, speed: 1.4, phase: 0},
-                {x: 454, y: 206, w: 16, h: 20, ax: 0, ay: -32, speed: 1.4, phase: 0},
+                {x: 454, y: 174, w: 16, h: 20, ax: 0, ay: 32, speed: 1.4, phase: 0},
             ],
             // the cup is up in the crossing, out of sight of the lanes
-            starts: [[60, 200], [580, 200], [100, 200], [540, 200]], cup: [320, 135],
+            starts: [[60, 200], [580, 200]], cup: [320, 135],
         },
         {
             name: 'Mayhem', par: 3,
@@ -244,12 +226,53 @@ window.lol9k1MinigolfRules = (function () {
         },
     ];
 
-    const PACKS = {
+    return {
         classic: {holes: CLASSIC, hint: 'Nine classic holes, everybody tees off from the same spot.'},
         brawl: {holes: BRAWL,
             hint: 'Everybody tees off from a different side and goes for the same cup. '
                 + 'Bump the others out of the way, knock them into the water, mind the bumpers!'},
     };
+})();
+
+(function () {
+    'use strict';
+
+    const root = document.getElementById('minigolf');
+    if (!root) {
+        return;
+    }
+    const rules = window.lol9k1MinigolfRules;
+
+    // ---------------------------------------------------------------- constants
+    // the course is as big as the canvas is in the page
+    const W = document.getElementById('minigolfCanvas').width;
+    const H = document.getElementById('minigolfCanvas').height;
+    const BALL_R = 6;
+    const WALL_R = BALL_R + 4;      // walls are drawn 8px thick
+    const CUP_R = 10;
+    const MAX_STROKES = parseInt(root.dataset.maxStrokes, 10) || 10;
+    const MAX_PLAYERS = parseInt(root.dataset.maxPlayers, 10) || 4;  // hot seat and network alike
+    const MAX_DRAG = 130;           // px of pull for a full power shot
+    const MAX_SPEED = 950;          // px/s
+    const DT = 1 / 240;             // physics step
+    const RESTITUTION = 0.75;
+    const DRAG = 0.9;               // exponential slow down per second
+    const ROLL = 80;                // constant rolling resistance px/s²
+    const SAND_DRAG = 3.5, SAND_ROLL = 420;
+    const BOOST_ACC = 1100;
+    const STOP_SPEED = 7;
+    const SINK_SPEED = 430;         // faster than this and the ball lips out
+    const BUMPER_KICK = 240;        // px/s a bumper adds to a ball bouncing off it
+    // a colour per seat, enough for as many players as the server lets into a game
+    const COLORS = ['#ffffff', '#ffeb3b', '#ff7043', '#4fc3f7', '#ba68c8', '#81c784', '#f06292', '#a1887f'];
+
+    // ---------------------------------------------------------------- course
+    function rect(x, y, w, h) {
+        return [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+    }
+
+    const PACKS = window.lol9k1MinigolfPacks;
+    const CLASSIC = PACKS.classic.holes;
 
     // the map packs as the server knows them, by id: {name, holes}
     const SERVER_COURSES = JSON.parse(root.dataset.courses || '{}');
@@ -913,18 +936,23 @@ window.lol9k1MinigolfRules = (function () {
         });
         ctx.restore();
 
-        // tees, coloured by whose they are when everybody has one of their own
+        // tees, framed in the colours of the players teeing off from them when there's more than one tee
         const own = hole.starts.length > 1;
+        const playing = players.length && state !== 'setup' && state !== 'finished';
         hole.starts.forEach((tee, i) => {
-            if (own && players.length && state !== 'setup' && state !== 'finished' && i >= players.length) {
+            const seats = playing ? players.map((p, seat) => seat).filter(seat => seat % hole.starts.length === i)
+                : [i];
+            if (!seats.length) {
                 return;
             }
             ctx.fillStyle = 'rgba(255,255,255,0.25)';
             ctx.fillRect(tee[0] - 14, tee[1] - 14, 28, 28);
             if (own) {
-                ctx.strokeStyle = COLORS[i % COLORS.length];
                 ctx.lineWidth = 2;
-                ctx.strokeRect(tee[0] - 14, tee[1] - 14, 28, 28);
+                seats.forEach((seat, k) => {
+                    ctx.strokeStyle = COLORS[seat % COLORS.length];
+                    ctx.strokeRect(tee[0] - 14 - 3 * k, tee[1] - 14 - 3 * k, 28 + 6 * k, 28 + 6 * k);
+                });
             }
         });
 
@@ -1314,11 +1342,11 @@ window.lol9k1MinigolfRules = (function () {
     }
 
     function updateAddButton() {
-        document.getElementById('minigolfAddPlayer').disabled = playerList.children.length >= 4;
+        document.getElementById('minigolfAddPlayer').disabled = playerList.children.length >= MAX_PLAYERS;
     }
 
     document.getElementById('minigolfAddPlayer').addEventListener('click', function () {
-        if (playerList.children.length < 4) {
+        if (playerList.children.length < MAX_PLAYERS) {
             addPlayerRow(`Guest ${playerList.children.length}`, false);
             playerList.lastChild.querySelector('input').select();
         }
@@ -1332,7 +1360,7 @@ window.lol9k1MinigolfRules = (function () {
         }
         const names = Array.from(playerList.querySelectorAll('input')).map((input, i) =>
             input.value.trim() || `Player ${i + 1}`);
-        players = names.map((name, i) => ({name, isMe: i === 0, color: COLORS[i], scores: [], ball: newBall()}));
+        players = names.map((name, i) => ({name, isMe: i === 0, color: COLORS[i % COLORS.length], scores: [], ball: newBall()}));
         setup.hidden = true;
         result.hidden = true;
         startHole(0);
@@ -1414,10 +1442,10 @@ window.lol9k1MinigolfRules = (function () {
         const places = rules.places(ranking.map(total));
         const rows = document.getElementById('minigolfResultRows');
         rows.textContent = '';
-        const MEDALS = ['🥇', '🥈', '🥉', '4.'];
+        const MEDALS = ['🥇', '🥈', '🥉'];
         ranking.forEach((p, i) => {
             const tr = el('tr');
-            tr.appendChild(el('td', MEDALS[places[i]]));
+            tr.appendChild(el('td', MEDALS[places[i]] || `${places[i] + 1}.`));
             tr.appendChild(el('td', p.name));
             tr.appendChild(el('td', `${total(p)} (${toPar(p)})`));
             rows.appendChild(tr);
@@ -1517,7 +1545,6 @@ window.lol9k1MinigolfRules = (function () {
     // Whenever this browser doesn't agree with the server about the game (a missed poll, a player who
     // left, a reload), it takes the server's state as it is.
     const gamesUrl = root.dataset.gamesUrl;
-    const MAX_PLAYERS = parseInt(root.dataset.maxPlayers, 10) || 4;
     const POLL_MS = 1000;
     const LIST_POLL_MS = 3000;
     const lobby = document.getElementById('minigolfLobby');
