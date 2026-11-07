@@ -8,7 +8,7 @@
       <tr>
         <th scope="col">#</th>
         <th scope="col">Player</th>
-        <th scope="col" title="One point for every team beaten, i.e. placed lower than yours">Points</th>
+        <th scope="col" title="One point for every team beaten, i.e. placed strictly lower than yours">Points</th>
         <th scope="col">Wins</th>
         <th scope="col">Played</th>
         <th scope="col">Badges</th>
@@ -32,7 +32,7 @@
       </tbody>
     </table>
     <small class="text-muted">
-      An event counts once its results are recorded. Every team you beat (placed lower than yours) is worth a point.
+      An event counts once its results are recorded. Every team you beat (placed strictly lower than yours) is worth a point, teams that tie don't beat each other.
     </small>
   {% else %}
     <p>No results recorded yet. Get playing!</p>

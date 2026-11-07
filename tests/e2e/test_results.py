@@ -82,6 +82,37 @@ def test_night_owls_and_undefeated_players_get_badges(page: Page, seed, party, a
     expect(achievements.locator('dd').nth(2)).not_to_contain_text('Bob')
 
 
+def points_on_leaderboard(page: Page) -> dict:
+    page.goto('/leaderboard/')
+    rows = page.locator('table.leaderboard tbody tr')
+    expect(rows.first).to_be_visible()
+    return {row.locator('td').nth(1).inner_text(): (row.locator('td').nth(2).inner_text(),
+                                                    row.locator('td').nth(3).inner_text())
+            for row in rows.all()}
+
+
+@pytest.mark.parametrize('placements, expected', [
+    # everybody ties: nobody beat anybody
+    ({'Alice': 1, 'Bob': 1, 'Carol': 1}, {'Alice': ('0', '0'), 'Bob': ('0', '0'), 'Carol': ('0', '0')}),
+    # two share first, both beat the third
+    ({'Alice': 1, 'Bob': 1, 'Carol': 3}, {'Alice': ('1', '1'), 'Bob': ('1', '1'), 'Carol': ('0', '0')}),
+    # a gap in the placements doesn't count as beaten teams
+    ({'Alice': 1, 'Bob': 3, 'Carol': 3}, {'Alice': ('2', '1'), 'Bob': ('0', '0'), 'Carol': ('0', '0')}),
+])
+def test_points_count_only_teams_placed_strictly_lower(page: Page, seed, party, alice, bob, placements, expected):
+    carol = seed.user('Carol')
+    event_id = seed.event(seed.game('Worms', added_by=alice), creator=alice, start=party.at(0, 10),
+                          end=party.at(0, 12))
+    make_captains(seed, event_id, alice, bob, carol)
+    with sqlite3.connect(seed.path) as db:
+        for name, team in team_ids(seed, event_id).items():
+            db.execute('insert into event_results (event, team, placement) values (?, ?, ?)',
+                       [event_id, team, placements[name]])
+    login(page, alice)
+
+    assert points_on_leaderboard(page) == expected
+
+
 def test_leaderboard_without_results(page: Page, alice):
     login(page, alice)
     page.goto('/leaderboard/')
