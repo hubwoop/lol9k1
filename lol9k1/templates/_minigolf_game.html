@@ -1,0 +1,77 @@
+{#- The game: the course, its overlays, the toolbar and the scorecard. On the map editor's page
+    (editor is true) it previews and test plays the hole being edited instead. -#}
+  <div id="minigolf" class="minigolf"
+       data-player="{{ session.get('username') }}"
+       data-submit-url="{{ url_for('minigolf.submit_round_api') }}"
+       data-leaderboard-url="{{ url_for('minigolf.leaderboard_api') }}"
+       data-games-url="{{ url_for('minigolf.games_api') }}"
+       data-max-players="{{ max_players }}"
+       data-courses="{{ courses|tojson|forceescape }}"
+       data-course="{{ course }}"
+       data-max-strokes="{{ max_strokes }}"{% if editor %}
+       data-mode="editor"{% endif %}>
+    <div class="minigolfTitle">⛳ LOL 9001 MINIGOLF ⛳</div>
+    <div class="minigolfStage">
+      <canvas id="minigolfCanvas" width="{{ course_width }}" height="{{ course_height }}" aria-label="Minigolf course"></canvas>
+
+      <div id="minigolfSetup" class="minigolfOverlay"{% if editor %} hidden{% endif %}>
+        <h3>Who's playing?</h3>
+        <p class="minigolfPack">
+          <label for="minigolfCourse">Map pack</label>
+          <select id="minigolfCourse">
+            {% for id, c in courses.items() %}
+              <option value="{{ id }}"{% if id == course %} selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </p>
+        <p id="minigolfCourseHint" class="minigolfHint"></p>
+        <p class="minigolfHint">Hot seat for up to {{ max_players }} players. Take turns on this computer!</p>
+        <ol id="minigolfPlayers"></ol>
+        <button type="button" id="minigolfAddPlayer" class="minigolfButton">+ Add player</button>
+        <button type="button" id="minigolfStart" class="minigolfButton minigolfButtonBig">Tee off!</button>
+        <p class="minigolfHint">
+          Click &amp; drag anywhere to aim, pull back further for more power, let go to putt.
+          Right click or <kbd>Esc</kbd> cancels a shot. Water costs a penalty stroke,
+          {{ max_strokes }} strokes max per hole.
+        </p>
+        <hr>
+        <h3>...or play over the network</h3>
+        <p class="minigolfHint">
+          Everybody on their own computer, up to {{ max_players }} players, on the map pack picked above.
+          Every player's round goes into the Hall of Fame.
+        </p>
+        <ul id="minigolfGames" class="minigolfGames" aria-label="Network games"></ul>
+        <button type="button" id="minigolfHost" class="minigolfButton">Host a network game</button>
+      </div>
+
+      <div id="minigolfLobby" class="minigolfOverlay" hidden>
+        <h3 id="minigolfLobbyTitle">Network game</h3>
+        <p id="minigolfLobbyHint" class="minigolfHint"></p>
+        <ol id="minigolfLobbyPlayers" aria-label="Players in the lobby"></ol>
+        <button type="button" id="minigolfLobbyStart" class="minigolfButton minigolfButtonBig">Start the game</button>
+        <button type="button" id="minigolfLobbyLeave" class="minigolfButton">Leave</button>
+      </div>
+
+      <div id="minigolfResult" class="minigolfOverlay" hidden>
+        <h3>Final results</h3>
+        <table class="minigolfResultTable">
+          <tbody id="minigolfResultRows"></tbody>
+        </table>
+        <p id="minigolfSaved" class="minigolfHint"></p>
+        <button type="button" id="minigolfAgain" class="minigolfButton minigolfButtonBig">Play again</button>
+      </div>
+    </div>
+    <div class="minigolfToolbar">
+      <span id="minigolfStatus">Ready.</span>
+      <span>
+        <button type="button" id="minigolfSkip" class="minigolfButton" hidden>Skip</button>
+        <button type="button" id="minigolfLeave" class="minigolfButton" hidden>Leave game</button>
+        <button type="button" id="minigolfSound" class="minigolfButton" aria-pressed="true">🔊 Sound</button>
+      </span>
+    </div>
+
+    <table class="minigolfScorecard" id="minigolfScorecard">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </div>

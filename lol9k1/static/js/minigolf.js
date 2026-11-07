@@ -49,7 +49,8 @@ window.lol9k1MinigolfRules = (function () {
 
 /*
  * The map packs, by id: their holes and a hint shown when the pack is picked. Plain data,
- * so it can be checked without playing it (tests/e2e/test_minigolf_packs.py).
+ * so it can be checked without playing it (tests/e2e/test_minigolf_packs.py), and edited and
+ * exported back as code by the map editor (/minigolf/editor, static/js/minigolf_editor.js).
  */
 window.lol9k1MinigolfPacks = (function () {
     'use strict';
@@ -242,6 +243,10 @@ window.lol9k1MinigolfPacks = (function () {
         return;
     }
     const rules = window.lol9k1MinigolfRules;
+    // On the map editor's page (static/js/minigolf_editor.js) the game shows the hole being edited
+    // and test plays it, see window.lol9k1Minigolf below.
+    const editorMode = root.dataset.mode === 'editor';
+    let testRun = null;      // the editor's test of a hole: {def, players}, nothing gets saved
 
     // ---------------------------------------------------------------- constants
     // the course is as big as the canvas is in the page
@@ -1368,6 +1373,10 @@ window.lol9k1MinigolfPacks = (function () {
     });
 
     document.getElementById('minigolfAgain').addEventListener('click', function () {
+        if (testRun) {
+            testHole(testRun.def, testRun.players);
+            return;
+        }
         if (net) {
             leaveNet();
             return;
@@ -1462,7 +1471,9 @@ window.lol9k1MinigolfPacks = (function () {
         } else {
             setStatus(`${ranking[0].name} wins!`);
         }
-        if (net) {
+        if (testRun) {
+            document.getElementById('minigolfSaved').textContent = 'A test run, nothing was saved.';
+        } else if (net) {
             // the server saved everybody's rounds when the last ball dropped
             clearTimeout(net.pollTimer);
             document.getElementById('minigolfSaved').textContent = ranking.length
@@ -1947,9 +1958,53 @@ window.lol9k1MinigolfPacks = (function () {
         loadLeaderboard();
     });
 
+    // ---------------------------------------------------------------- map editor
+    // Plays a single hole, as it is in the editor, for this many hot seat players. Nothing is saved.
+    function testHole(def, count) {
+        HOLES = [def];
+        testRun = {def, players: count};
+        players = Array.from({length: count}, (_, i) =>
+            ({name: `Player ${i + 1}`, isMe: i === 0, color: COLORS[i % COLORS.length], scores: [], ball: newBall()}));
+        setup.hidden = true;
+        result.hidden = true;
+        startHole(0);
+    }
+
+    if (editorMode) {
+        window.lol9k1Minigolf = {
+            // shows a hole as it would be played, with its windmills turning and sliders sliding
+            preview(def) {
+                if (state === 'setup') {
+                    hole = prepareHole(def);
+                }
+            },
+            test: testHole,
+            // back to the preview
+            stop() {
+                state = 'setup';
+                testRun = null;
+                players = [];
+                aim = null;
+                result.hidden = true;
+                renderScorecard();
+                setStatus('Editing.');
+            },
+            get state() {
+                return state;
+            },
+        };
+    }
+
     // ---------------------------------------------------------------- go
     addPlayerRow(me, true);
-    pickPack(courseSelect.value || root.dataset.course);
-    refreshGames();
+    if (editorMode) {
+        usePack(root.dataset.course);
+        hole = prepareHole(HOLES[0]);
+        setup.hidden = true;
+        setStatus('Editing.');
+    } else {
+        pickPack(courseSelect.value || root.dataset.course);
+        refreshGames();
+    }
     requestAnimationFrame(frame);
 })();
