@@ -11,7 +11,8 @@
        data-leaderboard-url="{{ url_for('minigolf.leaderboard_api') }}"
        data-games-url="{{ url_for('minigolf.games_api') }}"
        data-max-players="{{ max_players }}"
-       data-holes="{{ holes }}"
+       data-courses="{{ courses|tojson|forceescape }}"
+       data-course="{{ course }}"
        data-max-strokes="{{ max_strokes }}">
     <div class="minigolfTitle">⛳ LOL 9001 MINIGOLF ⛳</div>
     <div class="minigolfStage">
@@ -19,7 +20,16 @@
 
       <div id="minigolfSetup" class="minigolfOverlay">
         <h3>Who's playing?</h3>
-        <p class="minigolfHint">Hot seat for up to 4 players. Take turns on this computer!</p>
+        <p class="minigolfPack">
+          <label for="minigolfCourse">Map pack</label>
+          <select id="minigolfCourse">
+            {% for id, c in courses.items() %}
+              <option value="{{ id }}"{% if id == course %} selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </p>
+        <p id="minigolfCourseHint" class="minigolfHint"></p>
+        <p class="minigolfHint">Hot seat for up to {{ max_players }} players. Take turns on this computer!</p>
         <ol id="minigolfPlayers"></ol>
         <button type="button" id="minigolfAddPlayer" class="minigolfButton">+ Add player</button>
         <button type="button" id="minigolfStart" class="minigolfButton minigolfButtonBig">Tee off!</button>
@@ -31,7 +41,7 @@
         <hr>
         <h3>...or play over the network</h3>
         <p class="minigolfHint">
-          Everybody on their own computer, up to {{ max_players }} players.
+          Everybody on their own computer, up to {{ max_players }} players, on the map pack picked above.
           Every player's round goes into the Hall of Fame.
         </p>
         <ul id="minigolfGames" class="minigolfGames" aria-label="Network games"></ul>
@@ -72,7 +82,7 @@
 
   <div class="row minigolfBoards">
     <div class="col-md-6">
-      <h3>🏆 Hall of Fame</h3>
+      <h3>🏆 Hall of Fame <small id="minigolfBoardCourse">{{ courses[course].name }}</small></h3>
       <table class="table table-sm">
         <thead><tr><th>#</th><th>Player</th><th>Best round</th><th>Rounds</th></tr></thead>
         <tbody id="minigolfBest">

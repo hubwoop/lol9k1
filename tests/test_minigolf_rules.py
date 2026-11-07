@@ -141,3 +141,18 @@ def test_somebody_elses_ball_cant_be_holed_or_given_more_than_one_penalty():
         with pytest.raises(ValueError):
             state.shot(0, 0, [ball(2), rival])
     assert state.turn == 0
+
+
+def test_a_game_lasts_as_many_holes_as_its_course_has():
+    state = GameState.new(1, holes=2)
+    shoot(state, 0, 1, sunk=True)
+    assert not state.finished
+    shoot(state, 0, 1, sunk=True)
+    assert state.finished
+    assert state.scores == [[1, 1]]
+
+
+def test_every_course_has_holes():
+    from lol9k1.minigolf import COURSE, COURSES
+    assert COURSE in COURSES
+    assert all(c['holes'] > 0 and c['name'] for c in COURSES.values())

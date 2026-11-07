@@ -1,5 +1,7 @@
 """The minigolf game and its leaderboard."""
+import html
 import json
+import re
 
 from playwright.sync_api import Page, expect
 
@@ -75,7 +77,14 @@ def test_page_tells_the_script_how_many_holes_the_server_expects(page: Page, ali
 
     def with_holes(route):
         response = route.fetch()
-        route.fulfill(response=response, body=response.text().replace('data-holes="9"', 'data-holes="18"'))
+
+        def eighteen(match):
+            courses = json.loads(html.unescape(match.group(1)))
+            courses['classic']['holes'] = 18
+            return f'data-courses="{html.escape(json.dumps(courses))}"'
+        body, found = re.subn(r'data-courses="([^"]*)"', eighteen, response.text())
+        assert found == 1
+        route.fulfill(response=response, body=body)
     page.route('**/minigolf/', with_holes)
     page.goto('/minigolf/')
 
