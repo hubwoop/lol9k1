@@ -9,9 +9,13 @@ from lol9k1.leaderboard import (Appearance, MOST_VOTES, NIGHT_OWL, PICKED_LAST_B
 NOON = datetime(2026, 10, 10, 12), datetime(2026, 10, 10, 14)
 
 
-def appearance(user_id, event_id, placement, teams=2, game='CS', when=NOON, pick_number=None, last_pick=None):
+def appearance(user_id, event_id, placement, teams=2, game='CS', when=NOON, pick_number=None, last_pick=None,
+               beaten=None):
+    """By default every team has its own placement, so placement p of n teams beats n - p of them."""
+    if beaten is None:
+        beaten = teams - placement if placement else 0
     return Appearance(user_id=user_id, user_name=f'user{user_id}', event_id=event_id, start=when[0], end=when[1],
-                      game_name=game, teams=teams, placement=placement, pick_number=pick_number,
+                      game_name=game, placement=placement, beaten=beaten, pick_number=pick_number,
                       last_pick=last_pick)
 
 
@@ -25,10 +29,26 @@ def badges_of(board, user_id):
 
 def test_points_are_teams_beaten():
     board = rank_players([appearance(1, 1, 1, teams=4), appearance(2, 1, 2, teams=4), appearance(3, 1, None, teams=4),
-                   appearance(2, 2, 1)], [])
+                          appearance(2, 2, 1)], [])
 
     # on equal points and wins, fewer events played ranks higher
     assert standings(board) == [('user1', 1, 3, 1, 1), ('user2', 2, 3, 1, 2), ('user3', 3, 0, 0, 1)]
+
+
+def test_teams_sharing_a_placement_do_not_beat_each_other():
+    # 3 teams, two share first place
+    board = rank_players([appearance(1, 1, 1, beaten=1), appearance(2, 1, 1, beaten=1),
+                          appearance(3, 1, 3, beaten=0)], [])
+
+    assert standings(board) == [('user1', 1, 1, 1, 1), ('user2', 1, 1, 1, 1), ('user3', 3, 0, 0, 1)]
+
+
+def test_when_everybody_ties_nobody_scores_or_wins():
+    board = rank_players([appearance(user_id, event_id, 1, teams=3, beaten=0)
+                          for event_id in (1, 2) for user_id in (1, 2, 3)], [])
+
+    assert standings(board) == [('user1', 1, 0, 0, 2), ('user2', 1, 0, 0, 2), ('user3', 1, 0, 0, 2)]
+    assert board.achievements == []
 
 
 def test_equal_records_share_a_rank():

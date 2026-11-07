@@ -3,7 +3,8 @@ Ranks players across the whole party by their recorded match results and hands o
 
 An event counts as played once results are recorded for it. Then every participant
 of it has played it. A player scores one point for every team their team beat,
-i.e. every team placed lower than theirs.
+i.e. every team placed strictly lower than theirs. Teams that share a placement don't
+beat each other, so when every team ties nobody scores and nobody wins.
 """
 from collections import defaultdict
 from datetime import datetime, time, timedelta
@@ -30,21 +31,21 @@ class Appearance(NamedTuple):
     start: Optional[datetime]
     end: Optional[datetime]
     game_name: str
-    teams: int
     placement: Optional[int]
+    # teams of the event placed strictly lower than this player's team
+    beaten: int
     pick_number: Optional[int]
     last_pick: Optional[int]
 
     @property
     def won(self) -> bool:
-        return self.placement == 1
+        """First, and ahead of somebody. Teams sharing first place all win, unless everybody does."""
+        return self.placement == 1 and self.beaten > 0
 
     @property
     def points(self) -> int:
         """One point per team beaten. Placement 1 of 4 beats 3 teams, placement 4 of 4 beats none."""
-        if self.placement is None:
-            return 0
-        return max(self.teams - self.placement, 0)
+        return self.beaten
 
 
 class Upvotes(NamedTuple):
@@ -176,9 +177,12 @@ def played_at_night(start: Optional[datetime], end: Optional[datetime]) -> bool:
 def load_appearances() -> List[Appearance]:
     rows = get_db().execute('''
       select tp.user, u.name as user_name, e.id as event, e.start_datetime, e.end_datetime, g.name as game_name,
+        r.placement,
         (select count(*) from tournament_participants c
-          where c.tournament = e.id and c.is_team_captain = 1) as teams,
-        r.placement, tp.pick_number,
+            left join event_results o on o.event = c.tournament and o.team = c.team
+          where c.tournament = e.id and c.is_team_captain = 1 and r.placement is not null
+            and (o.placement is null or o.placement > r.placement)) as beaten,
+        tp.pick_number,
         (select max(l.pick_number) from tournament_participants l where l.tournament = e.id) as last_pick
       from tournament_participants tp
         join users u on tp.user = u.id
@@ -190,7 +194,7 @@ def load_appearances() -> List[Appearance]:
     return [Appearance(user_id=row['user'], user_name=row['user_name'], event_id=row['event'],
                        start=events.parse_stored_datetime(row['start_datetime']),
                        end=events.parse_stored_datetime(row['end_datetime']),
-                       game_name=row['game_name'], teams=row['teams'], placement=row['placement'],
+                       game_name=row['game_name'], placement=row['placement'], beaten=row['beaten'],
                        pick_number=row['pick_number'], last_pick=row['last_pick'])
             for row in rows]
 
