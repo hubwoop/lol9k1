@@ -522,6 +522,22 @@ window.lol9k1MinigolfEditorTools = (function () {
         if (points.some(p => offCanvas(p[0], p[1]))) {
             warn('Something is off the canvas, balls can\'t go there.');
         }
+        // things that would do nothing, without anything else telling
+        h.sliders.forEach((s, i) => {
+            if (offCanvas(s.x + s.ax, s.y + s.ay) || offCanvas(s.x + s.ax + s.w, s.y + s.ay + s.h)) {
+                warn(`Slider ${i + 1} slides off the canvas.`);
+            }
+        });
+        h.boosts.forEach((b, i) => {
+            if (!b[4] && !b[5]) {
+                warn(`Boost ${i + 1} doesn't push anywhere.`);
+            }
+        });
+        [['Sand', h.sand], ['Water', h.water], ['Boost', h.boosts]].forEach(([what, rects]) => rects.forEach((r, i) => {
+            if (!(r[2] > 0 && r[3] > 0)) {
+                warn(`${what} ${i + 1} has no size, it does nothing.`);
+            }
+        }));
         unfairTees(h, w, hh).forEach(warn);
         return out;
     }

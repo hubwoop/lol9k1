@@ -1961,8 +1961,9 @@ window.lol9k1MinigolfPacks = (function () {
     // ---------------------------------------------------------------- map editor
     // Plays a single hole, as it is in the editor, for this many hot seat players. Nothing is saved.
     function testHole(def, count) {
+        // the pack's holes come back when the test stops
+        testRun = {def, players: count, holes: testRun ? testRun.holes : HOLES};
         HOLES = [def];
-        testRun = {def, players: count};
         players = Array.from({length: count}, (_, i) =>
             ({name: `Player ${i + 1}`, isMe: i === 0, color: COLORS[i % COLORS.length], scores: [], ball: newBall()}));
         setup.hidden = true;
@@ -1982,6 +1983,9 @@ window.lol9k1MinigolfPacks = (function () {
             // back to the preview
             stop() {
                 state = 'setup';
+                if (testRun) {
+                    HOLES = testRun.holes;
+                }
                 testRun = null;
                 players = [];
                 aim = null;

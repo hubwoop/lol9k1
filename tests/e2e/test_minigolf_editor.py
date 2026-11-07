@@ -207,3 +207,49 @@ def test_the_workspace_is_kept_in_the_browser(page: Page, alice):
     expect(page.get_by_role('button', name='Dogleg (par 5)')).to_have_attribute('aria-current', 'true')
     stored = json.loads(page.evaluate("localStorage.getItem('minigolfEditor')"))
     assert stored['pack']['holes'][1]['par'] == 5
+
+
+def test_the_import_parser_only_reads_literals(page: Page, alice):
+    """Pasted text is the one way in for user text, the parser takes data and nothing else."""
+    login(page, alice)
+    open_editor(page)
+    hostile = ['alert(1)', 'fetch("/")', '(() => 1)()', '`template`', 'require("x")', 'new Date()',
+               '[1, 2].map(x => x)', 'window', 'rect(1, 2, 3)', 'NaN', '{a: 1} + 1', '[1] alert(1)']
+    results = page.evaluate('''codes => codes.map(code => {
+        try {
+            lol9k1MinigolfEditorTools.parseCode(code);
+            return 'read';
+        } catch (e) {
+            return 'refused';
+        }
+    })''', hostile)
+    assert dict(zip(hostile, results)) == {code: 'refused' for code in hostile}
+    # what it does read
+    assert page.evaluate('''lol9k1MinigolfEditorTools.parseCode(
+        "const X = [{a: 'b', 'c': -1.5e1, d: [true, null], e: rect(1, 2, 3, 4),}, /* x */]; // y")''') == \
+        [{'a': 'b', 'c': -15, 'd': [True, None], 'e': [[1, 2], [4, 2], [4, 6], [1, 6]]}]
+    # a __proto__ key doesn't reach Object.prototype
+    assert page.evaluate('''(() => {
+        lol9k1MinigolfEditorTools.parseCode('{__proto__: {polluted: 1}}');
+        return ({}).polluted === undefined;
+    })()''')
+
+
+def test_things_that_would_do_nothing_are_pointed_out(page: Page, alice):
+    login(page, alice)
+    open_editor(page)
+    new_hole(page)
+    page.get_by_role('button', name='Slider', exact=True).click()
+    click(page, 300, 200)
+    page.get_by_label('slides y').fill('400')
+    page.get_by_label('slides y').press('Enter')
+    expect(checks(page)).to_have_text('Slider 1 slides off the canvas.')
+    page.get_by_label('slides y').fill('60')
+    page.get_by_label('slides y').press('Enter')
+    expect(checks(page)).to_have_text('All good.')
+
+    page.get_by_role('button', name='Boost', exact=True).click()
+    click(page, 450, 200)
+    page.get_by_label('width').fill('0')
+    page.get_by_label('width').press('Enter')
+    expect(checks(page)).to_have_text('Boost 1 has no size, it does nothing.')
