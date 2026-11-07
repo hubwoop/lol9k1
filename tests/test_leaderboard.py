@@ -3,8 +3,8 @@ from datetime import datetime
 
 import pytest
 
-from lol9k1.leaderboard import (Appearance, MOST_VOTES, NIGHT_OWL, PICKED_LAST_BUT_WON, build, played_at_night,
-                                undefeated_in)
+from lol9k1.leaderboard import (Appearance, MOST_VOTES, NIGHT_OWL, PICKED_LAST_BUT_WON, Upvotes, played_at_night,
+                                rank_players, undefeated_in)
 
 NOON = datetime(2026, 10, 10, 12), datetime(2026, 10, 10, 14)
 
@@ -23,8 +23,8 @@ def badges_of(board, user_id):
     return next(s.badges for s in board.standings if s.user_id == user_id)
 
 
-def test_points_are_teams_finished_ahead_of():
-    board = build([appearance(1, 1, 1, teams=4), appearance(2, 1, 2, teams=4), appearance(3, 1, None, teams=4),
+def test_points_are_teams_beaten():
+    board = rank_players([appearance(1, 1, 1, teams=4), appearance(2, 1, 2, teams=4), appearance(3, 1, None, teams=4),
                    appearance(2, 2, 1)], [])
 
     # on equal points and wins, fewer events played ranks higher
@@ -32,21 +32,30 @@ def test_points_are_teams_finished_ahead_of():
 
 
 def test_equal_records_share_a_rank():
-    board = build([appearance(1, 1, 1), appearance(2, 2, 1), appearance(3, 2, 2)], [])
+    board = rank_players([appearance(1, 1, 1), appearance(2, 2, 1), appearance(3, 2, 2)], [])
 
     assert [(s.name, s.rank) for s in board.standings] == [('user1', 1), ('user2', 1), ('user3', 3)]
 
 
 def test_most_upvotes_badge_goes_to_everyone_tied_for_most():
-    board = build([appearance(1, 1, 1)], [(1, 'user1', 3), (2, 'user2', 3), (3, 'user3', 1)])
+    board = rank_players([appearance(1, 1, 1), appearance(2, 1, 2), appearance(3, 1, 2)],
+                         [Upvotes(1, 'user1', 3), Upvotes(2, 'user2', 3), Upvotes(3, 'user3', 1)])
 
     assert badges_of(board, 1) == [MOST_VOTES]
+    assert badges_of(board, 3) == []
     voters = next(a for a in board.achievements if a.badge == MOST_VOTES)
     assert voters.holders == ['user1', 'user2']
 
 
+def test_only_players_can_hold_badges():
+    board = rank_players([appearance(1, 1, 1)], [Upvotes(1, 'user1', 1), Upvotes(9, 'lurker', 5)])
+
+    assert standings(board) == [('user1', 1, 1, 1, 1)]
+    assert [(a.badge, a.holders) for a in board.achievements] == [(MOST_VOTES, ['user1'])]
+
+
 def test_last_pick_that_won():
-    board = build([appearance(1, 1, 1, pick_number=4, last_pick=4),
+    board = rank_players([appearance(1, 1, 1, pick_number=4, last_pick=4),
                    appearance(2, 1, 2, pick_number=3, last_pick=4),
                    appearance(3, 2, 2, pick_number=2, last_pick=2)], [])
 
@@ -56,7 +65,7 @@ def test_last_pick_that_won():
 
 
 def test_undefeated_needs_every_event_of_a_game_won():
-    board = build([appearance(1, 1, 1), appearance(1, 2, 1), appearance(1, 3, 1, game='Worms'),
+    board = rank_players([appearance(1, 1, 1), appearance(1, 2, 1), appearance(1, 3, 1, game='Worms'),
                    appearance(2, 1, 1), appearance(2, 2, 1), appearance(2, 4, 2)], [])
 
     assert badges_of(board, 1) == [undefeated_in('CS')]
@@ -65,7 +74,7 @@ def test_undefeated_needs_every_event_of_a_game_won():
 
 def test_night_owl():
     late = datetime(2026, 10, 11, 2, 30), datetime(2026, 10, 11, 3, 30)
-    board = build([appearance(1, 1, 2, when=late), appearance(2, 2, 2)], [])
+    board = rank_players([appearance(1, 1, 2, when=late), appearance(2, 2, 2)], [])
 
     assert badges_of(board, 1) == [NIGHT_OWL]
     assert badges_of(board, 2) == []

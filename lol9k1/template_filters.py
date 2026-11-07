@@ -22,7 +22,13 @@ def register_on(app):
 
     @app.template_filter('placement')
     def format_placement(placement: int) -> str:
-        return utilities.placement_to_string(placement)
+        """1 -> '🥇 1st', 4 -> '4th', 11 -> '11th', 22 -> '22nd'"""
+        medals = {1: '🥇 ', 2: '🥈 ', 3: '🥉 '}
+        if 10 <= placement % 100 <= 20:
+            suffix = 'th'
+        else:
+            suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(placement % 10, 'th')
+        return f'{medals.get(placement, "")}{placement}{suffix}'
 
     @app.template_filter('slugify')
     def translate_gender(string: str, fmt=None) -> str:

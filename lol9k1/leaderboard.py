@@ -2,17 +2,16 @@
 Ranks players across the whole party by their recorded match results and hands out badges.
 
 An event counts as played once results are recorded for it. Then every participant
-of it has played it, teams without a placement finished behind all placed teams.
-A player scores one point for every team their team finished ahead of.
+of it has played it. A player scores one point for every team their team beat,
+i.e. every team placed lower than theirs.
 """
 from collections import defaultdict
-from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, NamedTuple, Optional
 
-import dateutil.parser
 from flask import Blueprint, render_template
 
+from lol9k1 import events
 from lol9k1.auth import auth
 from lol9k1.database import get_db
 
@@ -23,8 +22,7 @@ NIGHT_OWL_UNTIL = time(6)
 UNDEFEATED_MIN_EVENTS = 2
 
 
-@dataclass(frozen=True)
-class Appearance:
+class Appearance(NamedTuple):
     """A player taking part in an event that has results."""
     user_id: int
     user_name: str
@@ -43,43 +41,45 @@ class Appearance:
 
     @property
     def points(self) -> int:
-        # teams finished ahead of, unplaced teams finished behind everybody placed
+        """One point per team beaten. Placement 1 of 4 beats 3 teams, placement 4 of 4 beats none."""
         if self.placement is None:
             return 0
         return max(self.teams - self.placement, 0)
 
 
-@dataclass(frozen=True)
-class Badge:
+class Upvotes(NamedTuple):
+    user_id: int
+    user_name: str
+    count: int
+
+
+class Badge(NamedTuple):
     icon: str
     title: str
     description: str
 
 
-@dataclass
-class Standing:
+class Standing(NamedTuple):
     user_id: int
     name: str
-    points: int = 0
-    wins: int = 0
-    played: int = 0
-    rank: int = 0
-    badges: List[Badge] = field(default_factory=list)
+    points: int
+    wins: int
+    played: int
+    rank: int
+    badges: List[Badge]
 
 
-@dataclass(frozen=True)
-class Achievement:
+class Achievement(NamedTuple):
     badge: Badge
     holders: List[str]
 
 
-@dataclass(frozen=True)
-class Leaderboard:
+class Leaderboard(NamedTuple):
     standings: List[Standing]
     achievements: List[Achievement]
 
 
-MOST_VOTES = Badge('🗳️', 'Most games voted for', 'Upvoted more games than anybody else.')
+MOST_VOTES = Badge('🗳️', 'Most games voted for', 'Upvoted more games than any other player.')
 PICKED_LAST_BUT_WON = Badge('🐢', 'Picked last but won', 'Was the last pick of an event and won it anyway.')
 NIGHT_OWL = Badge('🦉', 'Night owl', f'Played an event between {NIGHT_OWL_FROM:%H:%M} and {NIGHT_OWL_UNTIL:%H:%M}.')
 
@@ -92,55 +92,52 @@ def undefeated_in(game_name: str) -> Badge:
 @bp.route('/')
 @auth.login_required
 def leaderboard() -> str:
-    board = build(load_appearances(), load_upvotes())
+    board = rank_players(load_appearances(), load_upvotes())
     return render_template('leaderboard.html', page_title='Leaderboard', leaderboard=board)
 
 
-def build(appearances: Iterable[Appearance], upvotes: Iterable[tuple]) -> Leaderboard:
-    """Ranks the players of ``appearances``. ``upvotes`` are (user id, user name, number of upvotes)."""
-    appearances = list(appearances)
-    upvotes = list(upvotes)
-    standings = {}
-    for appearance in appearances:
-        standing = standings.setdefault(appearance.user_id, Standing(appearance.user_id, appearance.user_name))
-        standing.played += 1
-        standing.wins += appearance.won
-        standing.points += appearance.points
-    ranked = sorted(standings.values(), key=lambda s: (-s.points, -s.wins, s.played, s.name.casefold()))
-    for position, standing in enumerate(ranked, start=1):
-        previous = ranked[position - 2] if position > 1 else None
-        if previous and (previous.points, previous.wins, previous.played) == (standing.points, standing.wins,
-                                                                                standing.played):
-            standing.rank = previous.rank
+def rank_players(appearances: Iterable[Appearance], upvotes: Iterable[Upvotes]) -> Leaderboard:
+    """Ranks everybody who played an event with results. Only players can earn badges."""
+    by_user = _by_user(appearances)
+    badges = award_badges(by_user, upvotes)
+    totals = []
+    for user_id, user_appearances in by_user.items():
+        totals.append((user_id, user_appearances[0].user_name,
+                       sum(a.points for a in user_appearances),
+                       sum(a.won for a in user_appearances),
+                       len(user_appearances)))
+    totals.sort(key=lambda t: (-t[2], -t[3], t[4], t[1].casefold()))
+
+    standings = []
+    for position, (user_id, name, points, wins, played) in enumerate(totals, start=1):
+        previous = standings[-1] if standings else None
+        if previous and (previous.points, previous.wins, previous.played) == (points, wins, played):
+            rank = previous.rank
         else:
-            standing.rank = position
+            rank = position
+        standings.append(Standing(user_id, name, points, wins, played, rank, badges.get(user_id, [])))
 
-    names = {user_id: name for user_id, name, _ in upvotes}
-    names.update({a.user_id: a.user_name for a in appearances})
-    awarded = award_badges(appearances, upvotes)
-    for user_id, badges in awarded.items():
-        if user_id in standings:
-            standings[user_id].badges = badges
     holders = defaultdict(list)
-    for user_id, badges in awarded.items():
-        for badge in badges:
-            holders[badge].append(names[user_id])
-    achievements = [Achievement(badge, sorted(names_, key=str.casefold)) for badge, names_ in holders.items()]
+    for standing in standings:
+        for badge in standing.badges:
+            holders[badge].append(standing.name)
+    achievements = [Achievement(badge, sorted(names, key=str.casefold)) for badge, names in holders.items()]
     achievements.sort(key=lambda a: a.badge.title.casefold())
-    return Leaderboard(ranked, achievements)
+    return Leaderboard(standings, achievements)
 
 
-def award_badges(appearances: List[Appearance], upvotes: List[tuple]) -> dict:
-    """Maps user ids to the badges they earned."""
+def award_badges(by_user: Dict[int, List[Appearance]], upvotes: Iterable[Upvotes]) -> Dict[int, List[Badge]]:
+    """Maps the ids of players (users in ``by_user``) to the badges they earned."""
     badges = defaultdict(list)
 
-    most_upvotes = max((count for _, _, count in upvotes), default=0)
+    player_upvotes = [u for u in upvotes if u.user_id in by_user]
+    most_upvotes = max((u.count for u in player_upvotes), default=0)
     if most_upvotes > 0:
-        for user_id, _, count in upvotes:
-            if count == most_upvotes:
-                badges[user_id].append(MOST_VOTES)
+        for upvote in player_upvotes:
+            if upvote.count == most_upvotes:
+                badges[upvote.user_id].append(MOST_VOTES)
 
-    for user_id, user_appearances in _by_user(appearances).items():
+    for user_id, user_appearances in by_user.items():
         if any(a.won and a.pick_number is not None and a.pick_number == a.last_pick for a in user_appearances):
             badges[user_id].append(PICKED_LAST_BUT_WON)
         if any(played_at_night(a.start, a.end) for a in user_appearances):
@@ -155,11 +152,11 @@ def award_badges(appearances: List[Appearance], upvotes: List[tuple]) -> dict:
     return dict(badges)
 
 
-def _by_user(appearances: List[Appearance]) -> dict:
+def _by_user(appearances: Iterable[Appearance]) -> Dict[int, List[Appearance]]:
     by_user = defaultdict(list)
     for appearance in appearances:
         by_user[appearance.user_id].append(appearance)
-    return by_user
+    return dict(by_user)
 
 
 def played_at_night(start: Optional[datetime], end: Optional[datetime]) -> bool:
@@ -174,13 +171,6 @@ def played_at_night(start: Optional[datetime], end: Optional[datetime]) -> bool:
             return True
         day += timedelta(days=1)
     return False
-
-
-def _parse(value) -> Optional[datetime]:
-    try:
-        return dateutil.parser.parse(str(value)).replace(tzinfo=None)
-    except (ValueError, OverflowError):
-        return None
 
 
 def load_appearances() -> List[Appearance]:
@@ -198,14 +188,15 @@ def load_appearances() -> List[Appearance]:
       where exists (select 1 from event_results x where x.event = tp.tournament)
     ''').fetchall()
     return [Appearance(user_id=row['user'], user_name=row['user_name'], event_id=row['event'],
-                       start=_parse(row['start_datetime']), end=_parse(row['end_datetime']),
+                       start=events.parse_stored_datetime(row['start_datetime']),
+                       end=events.parse_stored_datetime(row['end_datetime']),
                        game_name=row['game_name'], teams=row['teams'], placement=row['placement'],
                        pick_number=row['pick_number'], last_pick=row['last_pick'])
             for row in rows]
 
 
-def load_upvotes() -> List[tuple]:
+def load_upvotes() -> List[Upvotes]:
     rows = get_db().execute('''
       select u.id, u.name, count(*) from votes v join users u on v.user = u.id where v.vote = 1 group by u.id
     ''').fetchall()
-    return [tuple(row) for row in rows]
+    return [Upvotes(*row) for row in rows]

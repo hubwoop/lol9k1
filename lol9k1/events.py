@@ -23,6 +23,8 @@ Details = namedtuple('details',
 Captain = namedtuple('captain', ['name', 'id', 'team', 'team_id'])
 PickDetails = namedtuple('PickDetails', ['pick_order', 'currently_picking'])
 
+PICK_PHASE = 'pickphase'
+
 
 class Event(NamedTuple):
     id: int
@@ -154,9 +156,9 @@ def handle_captains_post(event_id):
 
 @bp.route('/<int:event_id>/results', methods=['POST'])
 @auth.login_required
-def save_results(event_id):
+def handle_results_post(event_id):
     creator = get_creator_or_404(event_id)
-    if not user_may_manage(creator) or get_state(event_id) == 'pickphase':
+    if not user_may_manage(creator) or get_state(event_id) == PICK_PHASE:
         flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return redirect(url_for('.event', event_id=event_id))
     team_ids = {captain.team_id for captain in get_captains_from_db(event_id)}
@@ -173,6 +175,10 @@ def save_results(event_id):
             flash(f'Placements must be between 1 and {len(team_ids)}.', STYLE.warning)
             return redirect(url_for('.event', event_id=event_id))
         placements[team_id] = placement
+    if placements and len(placements) != len(team_ids):
+        # an unplaced team would silently score as if it finished last
+        flash('Place every team, or none to clear the results. Teams may share a placement.', STYLE.warning)
+        return redirect(url_for('.event', event_id=event_id))
     set_results(event_id, placements)
     flash('Results saved.' if placements else 'Results cleared.', STYLE.success)
     return redirect(url_for('.event', event_id=event_id))
@@ -182,7 +188,7 @@ def save_results(event_id):
 @auth.login_required
 def stop_pick_phase(event_id):
     creator = get_creator_or_404(event_id)
-    if get_state(event_id) == 'pickphase' and user_may_manage(creator):
+    if get_state(event_id) == PICK_PHASE and user_may_manage(creator):
         end_pick_state_in_db(event_id)
     return redirect(url_for('.event', event_id=event_id))
 
@@ -240,7 +246,7 @@ def add_teammate_api(event_id, team_id):
     possible_users = [user[0] for user in possible_users]
     if session.get('user_id') != get_captain(currently_picking_team) \
             or team_id != currently_picking_team \
-            or event_state != 'pickphase' \
+            or event_state != PICK_PHASE \
             or requested_user not in possible_users:
         return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
     # add requested user to requesting team
@@ -287,7 +293,7 @@ def user_allowed_to_skip(event_id, currently_picking_team, team_id, event_state)
     return ((session.get('user_id') == get_captain(currently_picking_team)
              or auth.current_user_is_admin()
              or session.get('user_id') == get_creator_of(event_id))
-            and event_state == "pickphase"
+            and event_state == PICK_PHASE
             and team_id == currently_picking_team)
 
 
@@ -456,11 +462,16 @@ def mode_to_string(mode) -> str:
         return 'Unknown'
 
 
-def normalise_stored_datetime(value) -> Optional[str]:
+def parse_stored_datetime(value) -> Optional[datetime]:
     try:
-        return dateutil.parser.parse(str(value)).replace(tzinfo=None).strftime(EVENT_DATETIME_FORMAT)
+        return dateutil.parser.parse(str(value)).replace(tzinfo=None)
     except (ValueError, OverflowError):
         return None
+
+
+def normalise_stored_datetime(value) -> Optional[str]:
+    parsed = parse_stored_datetime(value)
+    return parsed.strftime(EVENT_DATETIME_FORMAT) if parsed else None
 
 
 def format_events(fetch_date, events) -> List[dict]:
@@ -562,7 +573,7 @@ def initialize_pick_phase(event_id: int):
     random.shuffle(pick_order)
     db = get_db()
     db.execute('''update events set state = ?, pick_order = ?, currently_picking = ? where id = ?''',
-               ("pickphase", json.dumps(pick_order), pick_order[0], event_id))
+               (PICK_PHASE, json.dumps(pick_order), pick_order[0], event_id))
     db.commit()
     return True
 

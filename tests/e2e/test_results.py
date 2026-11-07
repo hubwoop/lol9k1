@@ -117,6 +117,26 @@ def test_invalid_placements_are_refused(page: Page, seed, alice, event_with_team
     assert results_of(seed, event_with_teams) == {}
 
 
+def test_placing_only_some_teams_is_refused(page: Page, seed, alice, event_with_teams):
+    login(page, alice)
+    team = team_ids(seed, event_with_teams)['Bob']
+
+    response = page.request.post(f'/event/{event_with_teams}/results', form={f'placement-{team}': '1'})
+
+    assert response.ok
+    assert results_of(seed, event_with_teams) == {}
+
+
+def test_teams_may_share_a_placement(page: Page, seed, alice, event_with_teams):
+    teams = team_ids(seed, event_with_teams)
+    login(page, alice)
+
+    page.request.post(f'/event/{event_with_teams}/results',
+                      form={f'placement-{teams["Bob"]}': '1', f'placement-{teams["Carol"]}': '1'})
+
+    assert results_of(seed, event_with_teams) == {teams['Bob']: 1, teams['Carol']: 1}
+
+
 def test_results_of_other_events_teams_are_ignored(page: Page, seed, party, alice, event_with_teams):
     other_event = seed.event(seed.game('Quake', added_by=alice), creator=alice,
                              start=party.at(0, 13), end=party.at(0, 14))
