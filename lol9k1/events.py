@@ -9,6 +9,7 @@ import dateutil.parser
 from flask import session, Blueprint, request, redirect, url_for, flash, render_template, Response, abort, current_app
 
 import lol9k1.utilities as utilities
+from lol9k1 import bracket
 from lol9k1.auth import auth
 from lol9k1.database import get_db, get_party_start_date, get_party_end_date
 from lol9k1.utilities import STYLE
@@ -96,6 +97,7 @@ def event(event_id):
         [event_id]).fetchall()
     captains = [row[0] for row in captain_rows]
     has_participants = False
+    has_bracket = bracket.enabled() and bracket.exists(event_id)
     if teams:
         for team in teams.values():
             if len(team.players) > 1:
@@ -109,6 +111,9 @@ def event(event_id):
                            users=users,
                            captains=captains,
                            hasParticipants=has_participants,
+                           has_bracket=has_bracket,
+                           may_manage=user_may_manage(event_details.creator_id),
+                           bracket_supported=bracket.supports(event_details.tournament_mode),
                            results=get_results(event_id),
                            enable_brackets=current_app.config['ENABLE_BRACKETS'])
 
@@ -608,6 +613,7 @@ def delete_with_all_dependencies_in_database(event_id):
       select games.slug from events e join games on e.game = games.id where e.id = ?
     ''', [event_id]).fetchone()[0]
     db.execute('''delete from event_results where event = ?''', [event_id])
+    db.execute('''delete from matches where event = ?''', [event_id])
     delete_all_teams_associated_with(event_id)
     db.execute('''delete from tournament_participants where tournament = ?''', [event_id])
     db.execute('''delete from events where id = ?''', [event_id])
@@ -649,9 +655,10 @@ def get_participants(event_id):
 
 
 def update_captains(event_id, captains):
-    # reset captains and teams, results belong to the old teams
+    # reset captains and teams, the results and the bracket belong to the old teams
     db = get_db()
     db.execute('''delete from event_results where event = ?''', [event_id])
+    db.execute('''delete from matches where event = ?''', [event_id])
     delete_all_teams_associated_with(event_id)
     db.execute('''delete from tournament_participants where tournament = ?''', [event_id])
     captains_teams = []

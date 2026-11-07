@@ -26,7 +26,8 @@ from werkzeug.security import generate_password_hash
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PASSWORD = 'correct horse battery staple'
 DATETIME_FORMAT = '%Y-%m-%dT%H:%M'  # format used by <input type="datetime-local">
-TABLES = ('event_results', 'tournament_participants', 'teams', 'events', 'votes', 'games', 'users', 'invites', 'config')
+TABLES = ('matches', 'event_results', 'tournament_participants', 'teams', 'events', 'votes', 'games', 'users',
+          'invites', 'config')
 
 
 SERVER_START_ATTEMPTS = 3
@@ -116,6 +117,7 @@ def _server_env(db_path: Path) -> dict:
         LOL9K1_SECRET_KEY='e2e-test-secret',
         # Playwright's request API doesn't send Secure cookies over http
         LOL9K1_SECURE_COOKIE='false',
+        LOL9K1_ENABLE_BRACKETS='true',
         PYTHONUNBUFFERED='1',
     )
     return env
