@@ -2,7 +2,42 @@
  * LOL 9001 Minigolf: a tiny top down minigolf game for the downtime between matches.
  * Hot seat for 1-4 players, the logged-in player's rounds go to the leaderboard.
  * No dependencies, just a canvas.
+ *
+ * lol9k1's own scripts usually live inline in the templates. The game is a file of its own
+ * because it's too big for that, static/js otherwise only holds vendored libraries.
  */
+
+/*
+ * The rules that don't depend on the game's state, as plain functions.
+ */
+window.lol9k1MinigolfRules = (function () {
+    'use strict';
+
+    const CUP_PULL = 2600;          // px/s² the cup pulls at a ball that's too fast to drop
+
+    return {
+        /**
+         * The places (0 = first) of the players with these totals. Tied players share
+         * a place and the next one after them skips ahead: [27, 27, 36] -> [0, 0, 2].
+         */
+        places(totals) {
+            return totals.map(t => totals.filter(other => other < t).length);
+        },
+
+        /**
+         * How a ball too fast to drop is pulled towards the centre of the cup, as a velocity change.
+         * (dx, dy) points from the ball to the centre. Dead centre there is no direction to pull in.
+         */
+        cupPull(dx, dy, dt) {
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d <= 1e-6) {
+                return {vx: 0, vy: 0};
+            }
+            return {vx: dx / d * CUP_PULL * dt, vy: dy / d * CUP_PULL * dt};
+        },
+    };
+})();
+
 (function () {
     'use strict';
 
@@ -10,9 +45,12 @@
     if (!root) {
         return;
     }
+    const rules = window.lol9k1MinigolfRules;
 
     // ---------------------------------------------------------------- constants
-    const W = 640, H = 400;
+    // the course is as big as the canvas is in the page
+    const W = document.getElementById('minigolfCanvas').width;
+    const H = document.getElementById('minigolfCanvas').height;
     const BALL_R = 6;
     const WALL_R = BALL_R + 4;      // walls are drawn 8px thick
     const CUP_R = 10;
@@ -102,6 +140,10 @@
             start: [100, 100], cup: [510, 300],
         },
     ];
+
+    // the server validates rounds against its own number of holes
+    const courseMismatch = Number(root.dataset.holes) === HOLES.length ? null
+        : `This course has ${HOLES.length} holes, but the server expects ${root.dataset.holes}. Rounds can't be saved.`;
 
     // ---------------------------------------------------------------- dom
     const canvas = document.getElementById('minigolfCanvas');
@@ -471,11 +513,9 @@
                     return;
                 }
                 // too fast: the cup pulls at the ball and it lips out
-                // (dead centre there is no direction to pull in, and dividing by 0 would make the ball NaN)
-                if (cd > 1e-6) {
-                    b.vx += cx / cd * 2600 * dt;
-                    b.vy += cy / cd * 2600 * dt;
-                }
+                const pull = rules.cupPull(cx, cy, dt);
+                b.vx += pull.vx;
+                b.vy += pull.vy;
             }
             // friction
             const factor = Math.exp(-drag * dt);
@@ -910,8 +950,19 @@
         if (state === 'rolling' && !anythingMoving()) {
             endOfShot();
         }
+        publishState();
         draw();
         requestAnimationFrame(frame);
+    }
+
+    // where the game is at, for styling and for anybody watching the page
+    function publishState() {
+        if (root.dataset.state !== state) {
+            root.dataset.state = state;
+        }
+        if (root.dataset.hole !== String(holeIndex + 1)) {
+            root.dataset.hole = String(holeIndex + 1);
+        }
     }
 
     // ---------------------------------------------------------------- input
@@ -1000,6 +1051,10 @@
     });
 
     document.getElementById('minigolfStart').addEventListener('click', function () {
+        if (courseMismatch) {
+            setStatus(courseMismatch);
+            return;
+        }
         const names = Array.from(playerList.querySelectorAll('input')).map((input, i) =>
             input.value.trim() || `Player ${i + 1}`);
         players = names.map((name, i) => ({name, isMe: i === 0, color: COLORS[i], scores: [], ball: newBall()}));
@@ -1074,17 +1129,13 @@
         state = 'finished';
         renderScorecard();
         const ranking = players.slice().sort((a, b) => total(a) - total(b));
+        const places = rules.places(ranking.map(total));
         const rows = document.getElementById('minigolfResultRows');
         rows.textContent = '';
         const MEDALS = ['🥇', '🥈', '🥉', '4.'];
-        let place = 0;
         ranking.forEach((p, i) => {
             const tr = el('tr');
-            // tied players share a place, the next one after them skips ahead (1, 1, 3)
-            if (i > 0 && total(p) !== total(ranking[i - 1])) {
-                place = i;
-            }
-            tr.appendChild(el('td', MEDALS[place]));
+            tr.appendChild(el('td', MEDALS[places[i]]));
             tr.appendChild(el('td', p.name));
             tr.appendChild(el('td', `${total(p)} (${toPar(p)})`));
             rows.appendChild(tr);
@@ -1140,21 +1191,16 @@
         recent.textContent = '';
         data.recent.forEach(row => {
             const tr = el('tr');
-            [row.name, String(row.total), row.played_at].forEach(v => tr.appendChild(el('td', v)));
+            [row.name, String(row.total), row.played_at.replace('T', ' ')].forEach(v => tr.appendChild(el('td', v)));
             recent.appendChild(tr);
         });
     }
 
     // ---------------------------------------------------------------- go
     addPlayerRow(me, true);
+    if (courseMismatch) {
+        setStatus(courseMismatch);
+    }
     hole = prepareHole(HOLES[Math.floor(Math.random() * HOLES.length)]);
     requestAnimationFrame(frame);
-
-    // for the e2e tests and the curious
-    window.lol9k1Minigolf = {
-        holes: HOLES,
-        startHole: (i) => startHole(i),
-        state: () => ({state, hole: holeIndex, turn, players: players.map(p => ({name: p.name, scores: p.scores.slice(),
-            strokes: p.ball.strokes, x: p.ball.x, y: p.ball.y}))}),
-    };
 })();

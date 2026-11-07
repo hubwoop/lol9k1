@@ -1,79 +1,80 @@
 """A small top down minigolf game to kill time between matches, with a shared leaderboard."""
-import functools
+import json
 from datetime import datetime
 
-from flask import Blueprint, g, jsonify, render_template, request, session
+from flask import Blueprint, render_template, request, session
 
+from lol9k1 import events
 from lol9k1.auth import auth
 from lol9k1.database import get_db
 
 bp = Blueprint('minigolf', __name__, url_prefix='/minigolf')
 
 COURSE = 'classic'
-HOLES = 9  # must match the number of holes in static/js/minigolf.js
+# The course itself lives in static/js/minigolf.js. The page hands HOLES to the script, which refuses
+# to start if its course has a different number of holes, so a mismatch can't go unnoticed.
+HOLES = 9
 MAX_STROKES = 10  # per hole, a ball that isn't holed by then scores this
 LEADERBOARD_SIZE = 10
 
-
-def api_login_required(view):
-    """Like auth.login_required, but answers 401 JSON instead of redirecting to the login page.
-
-    It also leaves the redirect target after login alone, so logging in again doesn't send the
-    browser to a POST only API url.
-    """
-    @functools.wraps(view)
-    def wrapped_view(*args, **kwargs):
-        if g.user is None:
-            return jsonify(error='not logged in'), 401
-        return view(*args, **kwargs)
-    return wrapped_view
+# Every finished round of the course with its total, the base of both leaderboards.
+ROUNDS = '''
+      select r.id, r.user, u.name, r.played_at, (select sum(s.value) from json_each(r.strokes) s) as total
+      from minigolf_rounds r
+        join users u on r.user = u.id
+      where r.course = ?
+'''
 
 
 @bp.route('/')
 @auth.login_required
 def minigolf() -> str:
-    return render_template('minigolf.html', page_title='Minigolf', max_strokes=MAX_STROKES, **leaderboard())
+    board = leaderboard()
+    return render_template('minigolf.html', page_title='Minigolf', holes=HOLES, max_strokes=MAX_STROKES,
+                           best=board['best'], recent=board['recent'])
 
 
 @bp.route('/api/rounds', methods=['POST'])
-@api_login_required
-def submit_round():
+@auth.login_required(api=True)
+def submit_round_api():
+    # Rounds are taken on trust: the game runs in the browser, so any logged-in player could post
+    # a perfect round. That's fine among friends at a LAN party, the checks only keep out garbage.
     payload = request.get_json(silent=True)
     strokes = payload.get('strokes') if isinstance(payload, dict) else None
     if (not isinstance(strokes, list) or len(strokes) != HOLES
             or not all(type(s) is int and 1 <= s <= MAX_STROKES for s in strokes)):
-        return jsonify(error=f'strokes must be a list of {HOLES} integers between 1 and {MAX_STROKES}'), 400
+        return json.dumps(f'strokes must be a list of {HOLES} integers between 1 and {MAX_STROKES}'), 400
     db = get_db()
-    db.execute('insert into minigolf_rounds (user, course, strokes, total, played_at) values (?, ?, ?, ?, ?)',
-               [session.get('user_id'), COURSE, ','.join(map(str, strokes)), sum(strokes),
-                datetime.now().strftime('%Y-%m-%d %H:%M')])
+    db.execute('''insert into minigolf_rounds (user, course, strokes, played_at) values (?, ?, ?, ?)''',
+               [session.get('user_id'), COURSE, json.dumps(strokes),
+                datetime.now().strftime(events.EVENT_DATETIME_FORMAT)])
     db.commit()
-    return jsonify(leaderboard()), 201
+    return json.dumps(leaderboard()), 201
 
 
 @bp.route('/api/leaderboard')
-@api_login_required
-def get_leaderboard():
-    return jsonify(leaderboard())
+@auth.login_required(api=True)
+def leaderboard_api():
+    return json.dumps(leaderboard())
 
 
 def leaderboard() -> dict:
+    """The best round of every player, and the latest round of every player, most recent first."""
     db = get_db()
-    best = db.execute('''
-select users.name, min(minigolf_rounds.total) as best, count(*) as rounds
-from minigolf_rounds
-  inner join users on minigolf_rounds.user = users.id
-where minigolf_rounds.course = ?
-group by users.id
-order by best asc, rounds desc, users.name asc
-limit ?''', [COURSE, LEADERBOARD_SIZE]).fetchall()
-    recent = db.execute('''
-select users.name, minigolf_rounds.total, minigolf_rounds.played_at
-from minigolf_rounds
-  inner join users on minigolf_rounds.user = users.id
-where minigolf_rounds.course = ?
-order by minigolf_rounds.id desc
-limit ?''', [COURSE, LEADERBOARD_SIZE]).fetchall()
+    best = db.execute(f'''
+      with rounds as ({ROUNDS})
+      select name, min(total) as best, count(*) as rounds from rounds
+      group by user
+      order by best asc, rounds desc, name asc
+      limit ?
+    ''', [COURSE, LEADERBOARD_SIZE]).fetchall()
+    recent = db.execute(f'''
+      with rounds as ({ROUNDS})
+      select name, total, played_at from rounds
+      where id in (select max(id) from rounds group by user)
+      order by id desc
+      limit ?
+    ''', [COURSE, LEADERBOARD_SIZE]).fetchall()
     return {
         'best': [{'name': r['name'], 'best': r['best'], 'rounds': r['rounds']} for r in best],
         'recent': [{'name': r['name'], 'total': r['total'], 'played_at': r['played_at']} for r in recent],

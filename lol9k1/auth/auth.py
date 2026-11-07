@@ -1,4 +1,5 @@
 import functools
+import json
 import sqlite3
 from typing import Optional, Union
 
@@ -14,10 +15,20 @@ from lol9k1.utilities import STYLE
 bp = Blueprint('auth', __name__, url_prefix='/auth', template_folder='templates')
 
 
-def login_required(view):
+def login_required(view=None, *, api=False):
+    """
+    Sends visitors that aren't logged in to the login page, and back here once they are.
+    With ``api=True`` (``@login_required(api=True)``) it answers 401 instead, for JSON APIs
+    that are fetched by scripts, and doesn't remember the API url as the target after login.
+    """
+    if view is None:
+        return functools.partial(login_required, api=api)
+
     @functools.wraps(view)
     def wrapped_view(*args, **kwargs):
         if g.user is None:
+            if api:
+                return json.dumps('not logged in'), 401
             session["redirect_target_after_login"] = request.url
             return redirect(url_for('landing.landing'))
         return view(*args, **kwargs)

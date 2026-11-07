@@ -55,7 +55,6 @@ class minigolf_rounds {
    integer user
    text course
    text strokes
-   integer total
    text played_at
    integer id
 }
