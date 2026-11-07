@@ -13,15 +13,14 @@ from typing import List, NamedTuple, Optional
 from flask import Blueprint, abort, current_app, flash, redirect, request, session, url_for, Response
 
 import lol9k1.utilities as utilities
+from lol9k1 import events
 from lol9k1.auth import auth
 from lol9k1.database import get_db
-from lol9k1.events import get_creator_or_404, get_details, user_may_manage
 from lol9k1.utilities import STYLE
 
 MAX_SCORE = 9999
-SINGLE_ELIMINATION = 1
 
-bp = Blueprint('bracket', __name__, url_prefix='/event')
+bp = Blueprint('bracket', __name__, url_prefix='/bracket')
 
 
 class BracketTeam(NamedTuple):
@@ -50,12 +49,13 @@ class Match(NamedTuple):
         return self.team1 if self.score1 > self.score2 else self.team2
 
 
-class BracketError(Exception):
-    """A score can't be entered right now, the message says why."""
-
-
 def enabled() -> bool:
     return current_app.config['ENABLE_BRACKETS']
+
+
+def supports(tournament_mode) -> bool:
+    """Whether a built-in bracket can be drawn for an event of this mode, events without a mode default to it."""
+    return tournament_mode is None or events.mode_to_string(tournament_mode) == utilities.SINGLE_ELIMINATION
 
 
 def seed_order(size: int) -> List[int]:
@@ -87,19 +87,21 @@ def exists(event_id: int) -> bool:
 
 def get_teams(event_id: int) -> dict:
     rows = get_db().execute('''
-      select t.id, t.name, t.captain, u.name from teams t
+      select t.id, t.name, t.captain from teams t
         join tournament_participants tp on tp.team = t.id and tp.is_team_captain = 1
-        join users u on t.captain = u.id
       where tp.tournament = ?
     ''', [event_id]).fetchall()
-    return {row[0]: BracketTeam(row[0], row[1] or f'Team {row[3]}', row[2]) for row in rows}
+    return {row[0]: BracketTeam(row[0], row[1] or f'Team #{row[0]}', row[2]) for row in rows}
 
 
-def create(event_id: int) -> None:
-    """Draws a new bracket from the teams of the event, replacing an existing one."""
+def create(event_id: int) -> Optional[str]:
+    """
+    Draws a new bracket from the teams of the event, replacing an existing one.
+    Returns why it can't be drawn, None if it was.
+    """
     team_ids = list(get_teams(event_id))
     if len(team_ids) < 2:
-        raise BracketError('A bracket needs at least two teams. Assign team captains first.')
+        return 'A bracket needs at least two teams. Assign team captains first.'
     random.shuffle(team_ids)
     size = 2
     while size < len(team_ids):
@@ -117,6 +119,7 @@ def create(event_id: int) -> None:
                        (event_id, round_index, position))
         round_index, matches_in_round = round_index + 1, matches_in_round // 2
     db.commit()
+    return None
 
 
 def delete(event_id: int) -> None:
@@ -169,14 +172,16 @@ def may_enter_score(match: Match, may_manage: bool) -> bool:
     return any(team is not None and team.captain == user_id for team in (match.team1, match.team2))
 
 
-def check_score_can_change(rounds: List[List[Match]], match: Match) -> None:
+def why_score_cannot_change(rounds: List[List[Match]], match: Match) -> Optional[str]:
+    """Why the result of ``match`` can't be entered or changed right now, None if it can."""
     if match.bye:
-        raise BracketError('This team advances without playing.')
+        return 'This team advances without playing.'
     if match.team1 is None or match.team2 is None:
-        raise BracketError('The teams of this match are not decided yet.')
+        return 'The teams of this match are not decided yet.'
     following = next_match(rounds, match)
     if following is not None and following.score1 is not None:
-        raise BracketError('The next match of the winner already has a result. Clear that one first.')
+        return 'The next match of the winner already has a result. Clear that one first.'
+    return None
 
 
 def set_score(event_id: int, match_id: int, scores: Optional[tuple]) -> None:
@@ -190,7 +195,7 @@ def set_score(event_id: int, match_id: int, scores: Optional[tuple]) -> None:
 def parse_scores(body) -> Optional[tuple]:
     """
     Parses ``{"score1": 2, "score2": 1}``, or ``{"score1": null, "score2": null}`` to clear a result.
-    Raises ValueError if the body is malformed and BracketError if the scores make no winner.
+    Raises ValueError if the body is malformed.
     """
     if not isinstance(body, dict) or 'score1' not in body or 'score2' not in body:
         raise ValueError
@@ -200,11 +205,18 @@ def parse_scores(body) -> Optional[tuple]:
     for score in (score1, score2):
         if isinstance(score, bool) or not isinstance(score, int):
             raise ValueError
-        if not 0 <= score <= MAX_SCORE:
-            raise BracketError(f'Scores must be between 0 and {MAX_SCORE}.')
-    if score1 == score2:
-        raise BracketError('A match needs a winner, the scores must not be equal.')
     return score1, score2
+
+
+def why_scores_are_invalid(scores: Optional[tuple]) -> Optional[str]:
+    """Why ``scores`` (as parsed by parse_scores) make no valid result, None if they do."""
+    if scores is None:
+        return None
+    if not all(0 <= score <= MAX_SCORE for score in scores):
+        return f'Scores must be between 0 and {MAX_SCORE}.'
+    if scores[0] == scores[1]:
+        return 'A match needs a winner, the scores must not be equal.'
+    return None
 
 
 def to_json(event_id: int, may_manage: bool) -> dict:
@@ -221,12 +233,7 @@ def to_json(event_id: int, may_manage: bool) -> dict:
         for match in matches_in_round:
             if match.bye:
                 continue
-            editable = may_enter_score(match, may_manage)
-            if editable:
-                try:
-                    check_score_can_change(rounds, match)
-                except BracketError:
-                    editable = False
+            editable = may_enter_score(match, may_manage) and why_score_cannot_change(rounds, match) is None
             matches.append({
                 'id': match.id,
                 'round': round_name(match.round, len(rounds)),
@@ -253,37 +260,37 @@ def to_json(event_id: int, may_manage: bool) -> dict:
 def require_enabled_event(event_id: int) -> int:
     if not enabled():
         abort(404)
-    return get_creator_or_404(event_id)
+    return events.get_creator_or_404(event_id)
 
 
-@bp.route('/<int:event_id>/bracket')
+@bp.route('/<int:event_id>')
 @auth.login_required
 def bracket_api(event_id):
     creator = require_enabled_event(event_id)
-    return json.dumps(to_json(event_id, user_may_manage(creator)))
+    return json.dumps(to_json(event_id, events.user_may_manage(creator)))
 
 
-@bp.route('/<int:event_id>/bracket', methods=['POST'])
+@bp.route('/<int:event_id>', methods=['POST'])
 @auth.login_required
-def manage_bracket(event_id) -> Response:
+def handle_bracket_post(event_id) -> Response:
     creator = require_enabled_event(event_id)
-    if not user_may_manage(creator):
+    if not events.user_may_manage(creator):
         flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
         return redirect(url_for('event.event', event_id=event_id))
     action = request.form.get('action')
     if action == 'create':
-        details = get_details(event_id)
+        details = events.get_details(event_id)
         if details.state:
             flash('Finish the pick phase before drawing the bracket.', STYLE.warning)
-        elif details.tournament_mode is not None and str(details.tournament_mode) != str(SINGLE_ELIMINATION):
+        elif not supports(details.tournament_mode):
             flash('Built-in brackets only support single elimination so far. '
                   'Link a bracket on an external website instead.', STYLE.warning)
         else:
-            try:
-                create(event_id)
+            problem = create(event_id)
+            if problem:
+                flash(problem, STYLE.warning)
+            else:
                 flash('Bracket drawn. Captains can now enter the results of their matches.', STYLE.success)
-            except BracketError as e:
-                flash(str(e), STYLE.warning)
     elif action == 'delete':
         delete(event_id)
         flash('Bracket deleted.', STYLE.message)
@@ -295,20 +302,24 @@ def manage_bracket(event_id) -> Response:
 @bp.route('/<int:event_id>/match/<int:match_id>/score', methods=['POST'])
 @auth.login_required
 def score_api(event_id, match_id):
+    """
+    Enters the result of a match and responds with the updated bracket. Like the other
+    APIs of an event, a refusal is answered with a JSON string saying why.
+    """
     creator = require_enabled_event(event_id)
     rounds = load(event_id)
     match = find(rounds, match_id)
     if match is None:
         abort(404)
-    may_manage = user_may_manage(creator)
+    may_manage = events.user_may_manage(creator)
     if not may_enter_score(match, may_manage):
-        return Response(json.dumps({'error': utilities.DFAULT_REFUSAL_MESSAGE}), 403, mimetype='application/json')
+        return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
     try:
         scores = parse_scores(request.get_json(silent=True))
-        check_score_can_change(rounds, match)
     except ValueError:
         abort(400)
-    except BracketError as e:
-        return Response(json.dumps({'error': str(e)}), 409, mimetype='application/json')
+    problem = why_scores_are_invalid(scores) or why_score_cannot_change(rounds, match)
+    if problem:
+        return json.dumps(problem)
     set_score(event_id, match_id, scores)
     return json.dumps(to_json(event_id, may_manage))

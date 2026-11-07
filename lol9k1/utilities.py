@@ -3,8 +3,9 @@ import uuid
 from collections import namedtuple
 
 DFAULT_REFUSAL_MESSAGE = "no."
+SINGLE_ELIMINATION = 'Single Elimination'
 MODE_INT_TO_STRING = {
-    1: 'Single Elimination',
+    1: SINGLE_ELIMINATION,
     2: 'Double Elimination'
 }
 GENDER_INT_TO_STRING = {

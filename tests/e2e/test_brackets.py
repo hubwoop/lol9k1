@@ -28,6 +28,24 @@ def captains(seed, alices_event, bob):
     return {user.name: user for user in users}
 
 
+@pytest.fixture
+def team_of(seed, alices_event):
+    """The label of the team a captain leads in Alice's event, unnamed teams are labelled by their id."""
+    def label(user) -> str:
+        team_id = seed.query('select team from tournament_participants where tournament = ? and user = ?',
+                             [alices_event, user.id])[0][0]
+        return f'Team #{team_id}'
+    return label
+
+
+def refusal(response) -> str:
+    """Like the other event APIs, the score API answers a refusal with a JSON string saying why."""
+    assert response.ok
+    body = response.json()
+    assert isinstance(body, str)
+    return body
+
+
 def draw_bracket(page: Page, event_id: int) -> None:
     page.goto(f'/event/{event_id}')
     page.get_by_role('button', name='Draw bracket').click()
@@ -35,7 +53,7 @@ def draw_bracket(page: Page, event_id: int) -> None:
 
 
 def bracket(page: Page, event_id: int) -> dict:
-    response = page.request.get(f'/event/{event_id}/bracket')
+    response = page.request.get(f'/bracket/{event_id}')
     assert response.ok
     return response.json()
 
@@ -46,7 +64,7 @@ def match_of(data: dict, team_name: str, round_name: str) -> dict:
 
 
 def post_score(page: Page, event_id: int, match_id: int, score1, score2):
-    return page.request.post(f'/event/{event_id}/match/{match_id}/score',
+    return page.request.post(f'/bracket/{event_id}/match/{match_id}/score',
                              data={'score1': score1, 'score2': score2}, headers=JSON)
 
 
@@ -65,7 +83,7 @@ def enter_score(page: Page, match: dict, score1: int, score2: int) -> None:
     row.get_by_role('button', name='Save').click()
 
 
-def test_creator_draws_bracket(page: Page, alice, alices_event, captains):
+def test_creator_draws_bracket(page: Page, alice, alices_event, captains, team_of):
     login(page, alice)
 
     draw_bracket(page, alices_event)
@@ -73,42 +91,44 @@ def test_creator_draws_bracket(page: Page, alice, alices_event, captains):
     # jquery.bracket renders two semifinals and the final, no third place match
     expect(page.locator('#bracket-container .round')).to_have_count(2)
     expect(page.locator('#bracket-container .team')).to_have_count(6)
-    for name in captains:
-        expect(page.locator('#bracket-container .label', has_text=f'Team {name}')).to_have_count(1)
+    for captain in captains.values():
+        expect(page.locator('#bracket-container .label', has_text=team_of(captain))).to_have_count(1)
     expect(page.locator('#bracket-matches tbody tr')).to_have_count(3)
     expect(final_row(page)).to_contain_text('TBD')
     data = bracket(page, alices_event)
     assert sorted(name for pairing in data['teams'] for name in pairing) == \
-        ['Team Bob', 'Team Carol', 'Team Dave', 'Team Erin']
+        sorted(team_of(captain) for captain in captains.values())
     assert data['champion'] is None
 
 
 def test_captain_enters_result_and_bracket_updates_for_everyone(page: Page, alice, alices_event, captains,
-                                                                  new_user_page):
+                                                                  team_of, new_user_page):
     login(page, alice)
     draw_bracket(page, alices_event)
-    bobs_match = match_of(bracket(page, alices_event), 'Team Bob', 'Semifinals')
+    team_bob = team_of(captains['Bob'])
+    bobs_match = match_of(bracket(page, alices_event), team_bob, 'Semifinals')
     bob_page = new_user_page(captains['Bob'])
     bob_page.goto(f'/event/{alices_event}')
 
-    bobs_side = 1 if bobs_match['team1']['name'] == 'Team Bob' else 2
+    bobs_side = 1 if bobs_match['team1']['name'] == team_bob else 2
     enter_score(bob_page, bobs_match, *((3, 1) if bobs_side == 1 else (1, 3)))
 
     final = final_row(bob_page)
-    expect(final).to_contain_text('Team Bob')
+    expect(final).to_contain_text(team_bob)
     # Alice's page picks up the result without reloading
-    expect(final_row(page)).to_contain_text('Team Bob')
-    expect(page.locator('#bracket-container .label', has_text='Team Bob')).to_have_count(2)
+    expect(final_row(page)).to_contain_text(team_bob)
+    expect(page.locator('#bracket-container .label', has_text=team_bob)).to_have_count(2)
     saved = next(m for m in bracket(page, alices_event)['matches'] if m['id'] == bobs_match['id'])
     assert saved['winner'] == saved[f'team{bobs_side}']['id']
 
 
-def test_captain_cannot_enter_result_of_other_match(page: Page, alice, alices_event, captains, new_user_page):
+def test_captain_cannot_enter_result_of_other_match(page: Page, alice, alices_event, captains, team_of,
+                                                     new_user_page):
     login(page, alice)
     draw_bracket(page, alices_event)
     data = bracket(page, alices_event)
     other_match = next(m for m in data['matches']
-                       if m['round'] == 'Semifinals' and 'Team Bob' not in (m['team1']['name'], m['team2']['name']))
+                       if m['round'] == 'Semifinals' and team_of(captains['Bob']) not in (m['team1']['name'], m['team2']['name']))
     bob_page = new_user_page(captains['Bob'])
     bob_page.goto(f'/event/{alices_event}')
 
@@ -116,7 +136,7 @@ def test_captain_cannot_enter_result_of_other_match(page: Page, alice, alices_ev
     expect(match_row(bob_page, other_match['id']).locator('input')).to_have_count(0)
     response = post_score(bob_page, alices_event, other_match['id'], 2, 0)
 
-    assert response.status == 403
+    assert refusal(response) == 'no.'
     assert bracket(page, alices_event)['matches'] == data['matches']
 
 
@@ -131,7 +151,7 @@ def test_spectator_sees_bracket_but_cannot_manage_it(page: Page, seed, alice, al
     expect(mallory.locator('#bracket-container .team')).to_have_count(6)
     expect(mallory.locator('#bracket-matches input')).to_have_count(0)
     expect(mallory.get_by_role('button', name='Delete bracket')).to_have_count(0)
-    response = mallory.request.post(f'/event/{alices_event}/bracket', form={'action': 'delete'})
+    response = mallory.request.post(f'/bracket/{alices_event}', form={'action': 'delete'})
     assert 'no.' in response.text()
     assert seed.query('select count(*) from matches')[0][0] == 3
 
@@ -152,8 +172,7 @@ def test_tournament_is_played_to_the_end(page: Page, alice, alices_event, captai
     # results before the final can only change once the final is cleared
     expect(match_row(page, semifinals[0]['id']).locator('input')).to_have_count(0)
     refused = post_score(page, alices_event, semifinals[0]['id'], 0, 2)
-    assert refused.status == 409
-    assert 'Clear that one first' in refused.json()['error']
+    assert 'Clear that one first' in refusal(refused)
 
     match_row(page, final['id']).get_by_role('button', name='Clear').click()
     expect(page.locator('#bracket-champion')).to_be_hidden()
@@ -175,12 +194,12 @@ def test_three_teams_get_a_bye(page: Page, seed, alice, bob, alices_event):
     assert (final['team1'] is None) != (final['team2'] is None)
     assert final['editable'] is False
     expect(page.locator('#bracket-container .label', has_text='BYE')).to_have_count(1)
-    assert post_score(page, alices_event, final['id'], 1, 0).status == 409
+    assert refusal(post_score(page, alices_event, final['id'], 1, 0)) == 'The teams of this match are not decided yet.'
 
 
 @pytest.mark.parametrize('body, status', [
-    ({'score1': 2, 'score2': 2}, 409),
-    ({'score1': -1, 'score2': 2}, 409),
+    ({'score1': 2, 'score2': 2}, 200),
+    ({'score1': -1, 'score2': 2}, 200),
     ({'score1': 2, 'score2': None}, 400),
     ({'score1': '2', 'score2': 1}, 400),
     ({'score1': True, 'score2': 1}, 400),
@@ -192,9 +211,11 @@ def test_invalid_scores_are_refused(page: Page, seed, alice, alices_event, capta
     draw_bracket(page, alices_event)
     match = bracket(page, alices_event)['matches'][0]
 
-    response = page.request.post(f'/event/{alices_event}/match/{match["id"]}/score', data=body, headers=JSON)
+    response = page.request.post(f'/bracket/{alices_event}/match/{match["id"]}/score', data=body, headers=JSON)
 
     assert response.status == status
+    if status == 200:
+        refusal(response)
     assert seed.query('select count(*) from matches where score1 is not null')[0][0] == 0
 
 
@@ -216,7 +237,7 @@ def test_unknown_match_or_event_is_404(page: Page, seed, alice, bob, party, worm
 
     assert post_score(page, other_event, match['id'], 1, 0).status == 404
     assert post_score(page, alices_event, 9999, 1, 0).status == 404
-    assert page.request.get('/event/9999/bracket').status == 404
+    assert page.request.get('/bracket/9999').status == 404
     assert bracket(page, other_event) == {'exists': False, 'may_manage': True}
 
 
@@ -264,7 +285,7 @@ def test_bracket_needs_single_elimination_event(page: Page, seed, alice, party, 
 
     page.goto(f'/event/{double}')
     expect(page.get_by_text('Built-in brackets only support single elimination so far.')).to_be_visible()
-    page.request.post(f'/event/{double}/bracket', form={'action': 'create'})
+    page.request.post(f'/bracket/{double}', form={'action': 'create'})
 
     assert seed.query('select count(*) from matches')[0][0] == 0
 
@@ -280,3 +301,14 @@ def test_team_names_are_rendered_as_text(page: Page, seed, alice, alices_event, 
     expect(page.locator('#bracket-container .label', has_text='<img src=x')).to_have_count(1)
     expect(page.locator('#bracket-matches td', has_text='<img src=x')).to_have_count(1)
     assert page.evaluate('window.pwned') is None
+
+
+def test_deleting_game_deletes_brackets_of_its_events(page: Page, seed, admin, alice, alices_event, worms,
+                                                     captains, new_user_page):
+    login(page, alice)
+    draw_bracket(page, alices_event)
+
+    new_user_page(admin).goto(f'/delete/game/{worms}')
+
+    assert seed.query('select count(*) from games where id = ?', [worms])[0][0] == 0
+    assert seed.query('select count(*) from matches')[0][0] == 0

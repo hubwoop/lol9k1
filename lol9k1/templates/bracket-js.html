@@ -1,7 +1,6 @@
 <script>
   (function () {
     const bracketUrl = {{ url_for('bracket.bracket_api', event_id=event_id)|tojson }};
-    const eventUrl = {{ url_for('event.event', event_id=event_id)|tojson }};
     const REFRESH_INTERVAL = 5000;
     const matchesBody = document.querySelector('#bracket-matches tbody');
     const errorBox = document.getElementById('bracket-error');
@@ -130,14 +129,15 @@
     }
 
     function postScore(matchId, score1, score2) {
-      fetch(`${eventUrl}/match/${matchId}/score`, {
+      fetch(`${bracketUrl}/match/${matchId}/score`, {
         method: 'POST',
         credentials: 'same-origin',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({score1: score1, score2: score2})
-      }).then(response => response.json().catch(() => ({})).then(body => {
-        if (!response.ok) {
-          showError(body.error || `Saving the result failed (${response.status}).`);
+      }).then(response => response.json().catch(() => null).then(body => {
+        // like the other event APIs, a refusal is a JSON string saying why
+        if (!response.ok || body === null || typeof body === 'string') {
+          showError(typeof body === 'string' ? body : `Saving the result failed (${response.status}).`);
           refresh();
           return;
         }

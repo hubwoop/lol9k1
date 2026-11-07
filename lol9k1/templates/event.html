@@ -55,11 +55,11 @@
       <div class="col">
         <h3>Bracket</h3>
         {% if may_manage %}
-          {% if event.tournament_mode|string != '1' %}
+          {% if not bracket_supported %}
             <p class="text-muted">Built-in brackets only support single elimination so far.</p>
           {% elif not has_bracket %}
             <p>Draw a single elimination bracket from the teams. Captains then enter the results of their matches.</p>
-            <form action="{{ url_for('bracket.manage_bracket', event_id=event_id) }}" method="post">
+            <form action="{{ url_for('bracket.handle_bracket_post', event_id=event_id) }}" method="post">
               <input type="hidden" name="action" value="create">
               <button type="submit" class="btn btn-primary">Draw bracket</button>
             </form>
@@ -83,12 +83,12 @@
             <tbody></tbody>
           </table>
           {% if may_manage %}
-            <form action="{{ url_for('bracket.manage_bracket', event_id=event_id) }}" method="post" class="d-inline"
+            <form action="{{ url_for('bracket.handle_bracket_post', event_id=event_id) }}" method="post" class="d-inline"
                   onsubmit="return confirm('Draw a new bracket? All results will be lost.')">
               <input type="hidden" name="action" value="create">
               <button type="submit" class="btn btn-outline-secondary btn-sm">Redraw bracket</button>
             </form>
-            <form action="{{ url_for('bracket.manage_bracket', event_id=event_id) }}" method="post" class="d-inline"
+            <form action="{{ url_for('bracket.handle_bracket_post', event_id=event_id) }}" method="post" class="d-inline"
                   onsubmit="return confirm('Delete the bracket and all its results?')">
               <input type="hidden" name="action" value="delete">
               <button type="submit" class="btn btn-outline-danger btn-sm">Delete bracket</button>
@@ -100,7 +100,7 @@
   {% endif %}
 
   {# ---------------------------- EDIT EVENT -------------------------------------------------------------------------- #}
-  {% if session.get('user_id') == event.creator_id or session.get('is_admin', False) %}
+  {% if may_manage %}
     <hr>
     {% if session.get('is_admin', False) and session.get('user_id') != event.creator_id %}
       {# Display a warning if an admin edits another persons event. #}
