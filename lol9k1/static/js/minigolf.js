@@ -1063,13 +1063,13 @@ window.lol9k1MinigolfPacks = (function () {
             ctx.rect(0, 0, r.door[0], H);
             ctx.rect(r.door[1], 0, W - r.door[1], H);
             ctx.clip();
-            drawBlades(blades, 12, 0.15, 0.55);
+            drawBlades(blades, BLADES_UP_HIGH);
             ctx.restore();
             ctx.save();
             ctx.beginPath();
             ctx.rect(r.door[0], 0, door, H);
             ctx.clip();
-            drawBlades(blades, 3, 0.35, 1);
+            drawBlades(blades, BLADES_IN_DOOR);
             ctx.restore();
             ctx.fillStyle = '#ffeb3b';
             ctx.beginPath();
@@ -1082,7 +1082,10 @@ window.lol9k1MinigolfPacks = (function () {
     }
 
     // drop: how far the shadow falls from the blades, the higher up they are the further
-    function drawBlades(blades, drop, shadow, alpha) {
+    const BLADES_UP_HIGH = {drop: 12, shadow: 0.15, alpha: 0.55};
+    const BLADES_IN_DOOR = {drop: 3, shadow: 0.35, alpha: 1};
+
+    function drawBlades(blades, {drop, shadow, alpha}) {
         ctx.lineCap = 'round';
         blades.forEach(e => {
             ctx.strokeStyle = `rgba(0,0,0,${shadow})`;
