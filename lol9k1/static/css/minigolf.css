@@ -183,3 +183,14 @@
 .minigolfButton[hidden] {
     display: none;
 }
+
+.minigolfPack {
+    margin: 4px 0;
+    font-weight: bold;
+}
+
+.minigolfPack select {
+    font: bold 12px Verdana, sans-serif;
+    margin-left: 6px;
+    border: 2px inset #ccc;
+}

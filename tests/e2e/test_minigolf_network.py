@@ -252,6 +252,6 @@ def test_a_full_game_cant_be_joined(page: Page, seed, alice, bob, new_user_page)
     assert eve_page.request.post(f'/minigolf/api/games/{gid}/join').status == 409
     eve_page.goto('/minigolf/')
     listed = eve_page.locator('#minigolfGames li')
-    expect(listed).to_contain_text("Alice's game: Alice, Bob, Carol, Dave")
+    expect(listed).to_contain_text("Alice's game (Classic): Alice, Bob, Carol, Dave")
     expect(listed).to_contain_text('(full)')
     expect(eve_page.get_by_role('button', name="Join Alice's game")).to_have_count(0)

@@ -23,10 +23,17 @@ from lol9k1.database import get_db
 
 bp = Blueprint('minigolf', __name__, url_prefix='/minigolf')
 
-COURSE = 'classic'
-# The course itself lives in static/js/minigolf.js. The page hands HOLES to the script, which refuses
-# to start if its course has a different number of holes, so a mismatch can't go unnoticed.
-HOLES = 9
+# The map packs to choose from, by id: their name and number of holes. The holes themselves live in
+# static/js/minigolf.js. The page hands the number of holes to the script, which refuses to play a pack
+# that has a different number of holes, so a mismatch can't go unnoticed. Every pack has a leaderboard
+# of its own, rounds and games remember the pack they were played on (their course).
+COURSES = {
+    'classic': {'name': 'Classic', 'holes': 9},
+    # everybody tees off from a different side, aims at the same cup and gets in each other's way
+    'brawl': {'name': 'Bumper Brawl', 'holes': 9},
+}
+COURSE = 'classic'  # the default
+HOLES = COURSES[COURSE]['holes']
 MAX_STROKES = 10  # per hole, a ball that isn't holed by then scores this
 LEADERBOARD_SIZE = 10
 MAX_PLAYERS = 4
@@ -55,8 +62,9 @@ ROUNDS = '''
 @bp.route('/')
 @auth.login_required
 def minigolf() -> str:
-    board = leaderboard()
-    return render_template('minigolf.html', page_title='Minigolf', holes=HOLES, max_strokes=MAX_STROKES,
+    board = leaderboard(COURSE)
+    return render_template('minigolf.html', page_title='Minigolf', courses=COURSES, course=COURSE,
+                           max_strokes=MAX_STROKES,
                            max_players=MAX_PLAYERS, course_width=COURSE_WIDTH, course_height=COURSE_HEIGHT,
                            best=board['best'], recent=board['recent'])
 
@@ -67,29 +75,42 @@ def submit_round_api():
     # Rounds are taken on trust: the game runs in the browser, so any logged-in player could post
     # a perfect round. That's fine among friends at a LAN party, the checks only keep out garbage.
     payload = request.get_json(silent=True)
-    strokes = payload.get('strokes') if isinstance(payload, dict) else None
-    if (not isinstance(strokes, list) or len(strokes) != HOLES
+    if not isinstance(payload, dict):
+        return json.dumps('expected a JSON object'), 400
+    course = payload.get('course', COURSE)
+    if course not in COURSES:
+        return json.dumps(f'course must be one of {", ".join(COURSES)}'), 400
+    holes = COURSES[course]['holes']
+    strokes = payload.get('strokes')
+    if (not isinstance(strokes, list) or len(strokes) != holes
             or not all(type(s) is int and 1 <= s <= MAX_STROKES for s in strokes)):
-        return json.dumps(f'strokes must be a list of {HOLES} integers between 1 and {MAX_STROKES}'), 400
+        return json.dumps(f'strokes must be a list of {holes} integers between 1 and {MAX_STROKES}'), 400
     db = get_db()
-    save_round(db, session.get('user_id'), strokes)
+    save_round(db, session.get('user_id'), course, strokes)
     db.commit()
-    return json.dumps(leaderboard()), 201
+    return json.dumps(leaderboard(course)), 201
 
 
-def save_round(db: sqlite3.Connection, user: int, strokes: list[int]) -> None:
+def save_round(db: sqlite3.Connection, user: int, course: str, strokes: list[int]) -> None:
     db.execute('''insert into minigolf_rounds (user, course, strokes, played_at) values (?, ?, ?, ?)''',
-               [user, COURSE, json.dumps(strokes), datetime.now().strftime(events.EVENT_DATETIME_FORMAT)])
+               [user, course, json.dumps(strokes), datetime.now().strftime(events.EVENT_DATETIME_FORMAT)])
+
+
+def _course_arg() -> str:
+    course = request.args.get('course', COURSE)
+    if course not in COURSES:
+        raise _ApiError(f'course must be one of {", ".join(COURSES)}', 400)
+    return course
 
 
 @bp.route('/api/leaderboard')
 @auth.login_required(api=True)
 def leaderboard_api():
-    return json.dumps(leaderboard())
+    return json.dumps(leaderboard(_course_arg()))
 
 
-def leaderboard() -> dict:
-    """The best round of every player, and the latest round of every player, most recent first."""
+def leaderboard(course: str) -> dict:
+    """On this course, the best round of every player, and the latest round of every player, most recent first."""
     db = get_db()
     best = db.execute(f'''
       with rounds as ({ROUNDS})
@@ -97,15 +118,16 @@ def leaderboard() -> dict:
       group by user
       order by best asc, rounds desc, name asc
       limit ?
-    ''', [COURSE, LEADERBOARD_SIZE]).fetchall()
+    ''', [course, LEADERBOARD_SIZE]).fetchall()
     recent = db.execute(f'''
       with rounds as ({ROUNDS})
       select name, total, played_at from rounds
       where id in (select max(id) from rounds group by user)
       order by id desc
       limit ?
-    ''', [COURSE, LEADERBOARD_SIZE]).fetchall()
+    ''', [course, LEADERBOARD_SIZE]).fetchall()
     return {
+        'course': course,
         'best': [{'name': r['name'], 'best': r['best'], 'rounds': r['rounds']} for r in best],
         'recent': [{'name': r['name'], 'total': r['total'], 'played_at': r['played_at']} for r in recent],
     }
@@ -128,6 +150,7 @@ def fresh_ball() -> dict:
 class GameState:
     """Where a running game is at, replayed from its moves. Players are referred to by seat."""
     players: int
+    holes: int = HOLES
     hole: int = 0
     balls: list = field(default_factory=list)
     scores: list = field(default_factory=list)  # per seat, the strokes on each finished hole
@@ -137,8 +160,8 @@ class GameState:
     finished: bool = False
 
     @classmethod
-    def new(cls, players: int) -> 'GameState':
-        state = cls(players, scores=[[] for _ in range(players)], left=[False] * players)
+    def new(cls, players: int, holes: int = HOLES) -> 'GameState':
+        state = cls(players, holes, scores=[[] for _ in range(players)], left=[False] * players)
         state._start_hole()
         return state
 
@@ -162,7 +185,7 @@ class GameState:
         for seat, ball in enumerate(self.balls):
             self.scores[seat].append(min(ball['strokes'], MAX_STROKES))
         self.hole += 1
-        if self.hole == HOLES:
+        if self.hole == self.holes:
             self.turn = None
             self.finished = True
         else:
@@ -256,6 +279,7 @@ def _timestamp(moment: datetime) -> str:
 @dataclass
 class Game:
     id: int
+    course: str
     status: str
     host: int
     created_at: str
@@ -295,13 +319,13 @@ def load_game(game_id: int) -> Optional[Game]:
              for m in db.execute('select * from minigolf_moves where game = ? order by seq', [game_id])]
     state = None
     if row['status'] != 'lobby':
-        state = GameState.new(len(players))
+        state = GameState.new(len(players), COURSES[row['course']]['holes'])
         for move in moves:
             if move['kind'] == 'shot':
                 state.shot(move['seat'], move['data']['hole'], move['data']['balls'])
             else:
                 state.leave(move['seat'])
-    return Game(row['id'], row['status'], row['host'], row['created_at'], row['started_at'],
+    return Game(row['id'], row['course'], row['status'], row['host'], row['created_at'], row['started_at'],
                 players, moves, state)
 
 
@@ -311,6 +335,7 @@ def game_view(game: Game, since: int = 0) -> dict:
     state = game.state
     view = {
         'id': game.id,
+        'course': game.course,
         'status': game.status,
         'host': next((p['name'] for p in game.players if p['user'] == game.host), None),
         'is_host': game.host == user,
@@ -368,7 +393,7 @@ def games_api():
     """The lobbies that can be joined, and the games the player is in."""
     user = session.get('user_id')
     rows = get_db().execute('''
-      select g.id, g.status, g.created_at, h.name as host,
+      select g.id, g.course, g.status, g.created_at, h.name as host,
              (select json_group_array(name) from (
                select u.name from minigolf_game_players p join users u on p.user = u.id
                where p.game = g.id order by p.id)) as players,
@@ -380,7 +405,7 @@ def games_api():
          or g.status = 'playing' and exists(select 1 from minigolf_game_players p where p.game = g.id and p.user = ?)
       order by g.id desc
     ''', [user, user, _timestamp(_now() - LOBBY_TTL), user]).fetchall()
-    return json.dumps([{'id': r['id'], 'status': r['status'], 'host': r['host'], 'players': json.loads(r['players']),
+    return json.dumps([{'id': r['id'], 'course': r['course'], 'status': r['status'], 'host': r['host'], 'players': json.loads(r['players']),
                         'joined': bool(r['joined'])}
                        for r in rows if not r['left_game']])
 
@@ -388,6 +413,11 @@ def games_api():
 @bp.route('/api/games', methods=['POST'])
 @auth.login_required(api=True)
 def create_game_api():
+    payload = request.get_json(silent=True)
+    # without a body it's a game on the default course
+    course = payload.get('course', COURSE) if isinstance(payload, dict) else COURSE
+    if course not in COURSES:
+        raise _ApiError(f'course must be one of {", ".join(COURSES)}', 400)
     db = get_db()
     # lobbies nobody started in time aren't offered anymore, so they can go. Played games are kept
     # with their moves, it's one row per putt and a LAN party doesn't putt that much.
@@ -396,7 +426,7 @@ def create_game_api():
                     select id from minigolf_games where status = 'lobby' and created_at < ?)''', [stale])
     db.execute("delete from minigolf_games where status = 'lobby' and created_at < ?", [stale])
     cursor = db.execute('insert into minigolf_games (course, host, status, created_at) values (?, ?, ?, ?)',
-                        [COURSE, session.get('user_id'), 'lobby', _timestamp(_now())])
+                        [course, session.get('user_id'), 'lobby', _timestamp(_now())])
     db.execute('insert into minigolf_game_players (game, user) values (?, ?)', [cursor.lastrowid, session.get('user_id')])
     db.commit()
     return json.dumps(game_view(load_game(cursor.lastrowid))), 201
@@ -541,5 +571,5 @@ def _add_move(game: Game, user: int, seat: int, kind: str, data: Optional[dict])
         db.execute("update minigolf_games set status = 'finished' where id = ?", [game.id])
         for i, player in enumerate(game.players):
             if not game.state.left[i]:
-                save_round(db, player['user'], game.state.scores[i])
+                save_round(db, player['user'], game.course, game.state.scores[i])
     db.commit()

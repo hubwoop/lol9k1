@@ -14,6 +14,13 @@ Hall of Fame. A player who hasn't putted for 90 seconds can be skipped by the ot
 Balls knock each other around, but only your own putt can hole your ball: a ball knocked into the
 cup goes back to where it lay, and so does a ball knocked into the water, for one penalty stroke.
 
+Pick a map pack before you tee off or host a game, every pack has a Hall of Fame of its own:
+- *Classic*: nine holes, everybody tees off from the same spot.
+- *Bumper Brawl*: nine holes made for getting in each other's way. Everybody tees off from a
+  different side and goes for the same cup, across narrow planks over the water, through a gate
+  just wide enough for one ball, around pinball bumpers that kick balls away, on a pool table with
+  pockets. Knock the others into the water, or clear their ball out of your way.
+
 ## Recommended Setup
 ### On macOS and Linux 
 - `python3 -m venv lol9k1env`

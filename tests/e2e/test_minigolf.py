@@ -75,7 +75,9 @@ def test_page_tells_the_script_how_many_holes_the_server_expects(page: Page, ali
 
     def with_holes(route):
         response = route.fetch()
-        route.fulfill(response=response, body=response.text().replace('data-holes="9"', 'data-holes="18"'))
+        courses = '{&#34;holes&#34;: 9, &#34;name&#34;: &#34;Classic&#34;}'
+        assert courses in response.text()
+        route.fulfill(response=response, body=response.text().replace(courses, courses.replace('9', '18')))
     page.route('**/minigolf/', with_holes)
     page.goto('/minigolf/')
 
