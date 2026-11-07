@@ -9,6 +9,7 @@ import dateutil.parser
 from flask import session, Blueprint, request, redirect, url_for, flash, render_template, Response, abort, current_app
 
 import lol9k1.utilities as utilities
+from lol9k1 import bracket
 from lol9k1.auth import auth
 from lol9k1.database import get_db, get_party_start_date, get_party_end_date
 from lol9k1.utilities import STYLE
@@ -22,6 +23,8 @@ Details = namedtuple('details',
                       'description', 'external_url'])
 Captain = namedtuple('captain', ['name', 'id', 'team', 'team_id'])
 PickDetails = namedtuple('PickDetails', ['pick_order', 'currently_picking'])
+
+PICK_PHASE = 'pickphase'
 
 
 class Event(NamedTuple):
@@ -94,6 +97,7 @@ def event(event_id):
         [event_id]).fetchall()
     captains = [row[0] for row in captain_rows]
     has_participants = False
+    has_bracket = bracket.enabled() and bracket.exists(event_id)
     if teams:
         for team in teams.values():
             if len(team.players) > 1:
@@ -107,6 +111,10 @@ def event(event_id):
                            users=users,
                            captains=captains,
                            hasParticipants=has_participants,
+                           has_bracket=has_bracket,
+                           may_manage=user_may_manage(event_details.creator_id),
+                           bracket_supported=bracket.supports(event_details.tournament_mode),
+                           results=get_results(event_id),
                            enable_brackets=current_app.config['ENABLE_BRACKETS'])
 
 
@@ -151,11 +159,41 @@ def handle_captains_post(event_id):
         update_captains(event_id, captains)
 
 
+@bp.route('/<int:event_id>/results', methods=['POST'])
+@auth.login_required
+def handle_results_post(event_id):
+    creator = get_creator_or_404(event_id)
+    if not user_may_manage(creator) or get_state(event_id) == PICK_PHASE:
+        flash(utilities.DFAULT_REFUSAL_MESSAGE, STYLE.warning)
+        return redirect(url_for('.event', event_id=event_id))
+    team_ids = {captain.team_id for captain in get_captains_from_db(event_id)}
+    placements = {}
+    for team_id in team_ids:
+        value = request.form.get(f'placement-{team_id}', '').strip()
+        if not value:
+            continue
+        try:
+            placement = int(value)
+        except ValueError:
+            placement = 0
+        if not 1 <= placement <= len(team_ids):
+            flash(f'Placements must be between 1 and {len(team_ids)}.', STYLE.warning)
+            return redirect(url_for('.event', event_id=event_id))
+        placements[team_id] = placement
+    if placements and len(placements) != len(team_ids):
+        # an unplaced team would silently score as if it finished last
+        flash('Place every team, or none to clear the results. Teams may share a placement.', STYLE.warning)
+        return redirect(url_for('.event', event_id=event_id))
+    set_results(event_id, placements)
+    flash('Results saved.' if placements else 'Results cleared.', STYLE.success)
+    return redirect(url_for('.event', event_id=event_id))
+
+
 @bp.route('/<int:event_id>/stop-pick-phase', methods=['GET'])
 @auth.login_required
 def stop_pick_phase(event_id):
     creator = get_creator_or_404(event_id)
-    if get_state(event_id) == 'pickphase' and user_may_manage(creator):
+    if get_state(event_id) == PICK_PHASE and user_may_manage(creator):
         end_pick_state_in_db(event_id)
     return redirect(url_for('.event', event_id=event_id))
 
@@ -213,12 +251,14 @@ def add_teammate_api(event_id, team_id):
     possible_users = [user[0] for user in possible_users]
     if session.get('user_id') != get_captain(currently_picking_team) \
             or team_id != currently_picking_team \
-            or event_state != 'pickphase' \
+            or event_state != PICK_PHASE \
             or requested_user not in possible_users:
         return json.dumps(utilities.DFAULT_REFUSAL_MESSAGE)
     # add requested user to requesting team
-    db.execute('''insert into tournament_participants (user, tournament, team) values (?, ? ,?)''',
-               (requested_user, event_id, team_id))
+    db.execute('''
+      insert into tournament_participants (user, tournament, team, pick_number)
+      values (?, ?, ?, (select coalesce(max(pick_number), 0) + 1 from tournament_participants where tournament = ?))
+    ''', (requested_user, event_id, team_id, event_id))
     db.commit()
     skips = get_skips(event_id)
     if skips > 0:
@@ -258,7 +298,7 @@ def user_allowed_to_skip(event_id, currently_picking_team, team_id, event_state)
     return ((session.get('user_id') == get_captain(currently_picking_team)
              or auth.current_user_is_admin()
              or session.get('user_id') == get_creator_of(event_id))
-            and event_state == "pickphase"
+            and event_state == PICK_PHASE
             and team_id == currently_picking_team)
 
 
@@ -427,11 +467,16 @@ def mode_to_string(mode) -> str:
         return 'Unknown'
 
 
-def normalise_stored_datetime(value) -> Optional[str]:
+def parse_stored_datetime(value) -> Optional[datetime]:
     try:
-        return dateutil.parser.parse(str(value)).replace(tzinfo=None).strftime(EVENT_DATETIME_FORMAT)
+        return dateutil.parser.parse(str(value)).replace(tzinfo=None)
     except (ValueError, OverflowError):
         return None
+
+
+def normalise_stored_datetime(value) -> Optional[str]:
+    parsed = parse_stored_datetime(value)
+    return parsed.strftime(EVENT_DATETIME_FORMAT) if parsed else None
 
 
 def format_events(fetch_date, events) -> List[dict]:
@@ -533,7 +578,7 @@ def initialize_pick_phase(event_id: int):
     random.shuffle(pick_order)
     db = get_db()
     db.execute('''update events set state = ?, pick_order = ?, currently_picking = ? where id = ?''',
-               ("pickphase", json.dumps(pick_order), pick_order[0], event_id))
+               (PICK_PHASE, json.dumps(pick_order), pick_order[0], event_id))
     db.commit()
     return True
 
@@ -567,6 +612,8 @@ def delete_with_all_dependencies_in_database(event_id):
     game = db.execute('''
       select games.slug from events e join games on e.game = games.id where e.id = ?
     ''', [event_id]).fetchone()[0]
+    db.execute('''delete from event_results where event = ?''', [event_id])
+    db.execute('''delete from matches where event = ?''', [event_id])
     delete_all_teams_associated_with(event_id)
     db.execute('''delete from tournament_participants where tournament = ?''', [event_id])
     db.execute('''delete from events where id = ?''', [event_id])
@@ -608,8 +655,10 @@ def get_participants(event_id):
 
 
 def update_captains(event_id, captains):
-    # reset captains and teams
+    # reset captains and teams, the results and the bracket belong to the old teams
     db = get_db()
+    db.execute('''delete from event_results where event = ?''', [event_id])
+    db.execute('''delete from matches where event = ?''', [event_id])
     delete_all_teams_associated_with(event_id)
     db.execute('''delete from tournament_participants where tournament = ?''', [event_id])
     captains_teams = []
@@ -629,6 +678,20 @@ def delete_all_teams_associated_with(event_id):
     db = get_db()
     db.execute('''delete from teams where id in (select team from tournament_participants where tournament = ?)
               ''', [event_id])
+    db.commit()
+
+
+def get_results(event_id) -> dict:
+    """Maps the team ids of an event to their placement, 1 = winner."""
+    rows = get_db().execute('''select team, placement from event_results where event = ?''', [event_id])
+    return {row['team']: row['placement'] for row in rows}
+
+
+def set_results(event_id, placements: dict):
+    db = get_db()
+    db.execute('''delete from event_results where event = ?''', [event_id])
+    db.executemany('''insert into event_results (event, team, placement) values (?, ?, ?)''',
+                   [(event_id, team_id, placement) for team_id, placement in placements.items()])
     db.commit()
 
 

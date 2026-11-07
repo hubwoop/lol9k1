@@ -40,6 +40,12 @@ def create_app(test_config=None):
     from . import events
     app.register_blueprint(events.bp)
 
+    from . import bracket
+    app.register_blueprint(bracket.bp)
+
+    from . import leaderboard
+    app.register_blueprint(leaderboard.bp)
+
     from . import minigolf
     app.register_blueprint(minigolf.bp)
 
