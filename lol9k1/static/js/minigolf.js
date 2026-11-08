@@ -1051,27 +1051,26 @@ window.lol9k1MinigolfPacks = (function () {
         ctx.fill();
     }
 
+    // The blades only come down to the ground in the windmill's door, which is the only place they hit a
+    // ball (see step). Everywhere else they turn high above the course, so they are drawn faded there,
+    // with their shadow far below them, and the balls roll right under them.
     function drawRotors() {
         hole.rotors.forEach(r => {
-            ctx.lineCap = 'round';
-            rotorBlades(r, time).forEach(e => {
-                ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-                ctx.lineWidth = 8;
-                ctx.beginPath();
-                ctx.moveTo(e[0] + 3, e[1] + 3);
-                ctx.lineTo(e[2] + 3, e[3] + 3);
-                ctx.stroke();
-                ctx.strokeStyle = '#5d4037';
-                ctx.lineWidth = 7;
-                ctx.beginPath();
-                ctx.moveTo(e[0], e[1]);
-                ctx.lineTo(e[2], e[3]);
-                ctx.stroke();
-                ctx.strokeStyle = '#fff8e1';
-                ctx.lineWidth = 3;
-                ctx.stroke();
-            });
-            ctx.lineCap = 'butt';
+            const blades = rotorBlades(r, time);
+            const door = r.door[1] - r.door[0];
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, r.door[0], H);
+            ctx.rect(r.door[1], 0, W - r.door[1], H);
+            ctx.clip();
+            drawBlades(blades, BLADES_UP_HIGH);
+            ctx.restore();
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(r.door[0], 0, door, H);
+            ctx.clip();
+            drawBlades(blades, BLADES_IN_DOOR);
+            ctx.restore();
             ctx.fillStyle = '#ffeb3b';
             ctx.beginPath();
             ctx.arc(r.cx, r.cy, 6, 0, Math.PI * 2);
@@ -1080,6 +1079,36 @@ window.lol9k1MinigolfPacks = (function () {
             ctx.lineWidth = 1;
             ctx.stroke();
         });
+    }
+
+    // drop: how far the shadow falls from the blades, the higher up they are the further
+    const BLADES_UP_HIGH = {drop: 12, shadow: 0.15, alpha: 0.55};
+    const BLADES_IN_DOOR = {drop: 3, shadow: 0.35, alpha: 1};
+
+    function drawBlades(blades, {drop, shadow, alpha}) {
+        ctx.lineCap = 'round';
+        blades.forEach(e => {
+            ctx.strokeStyle = `rgba(0,0,0,${shadow})`;
+            ctx.lineWidth = 8;
+            ctx.beginPath();
+            ctx.moveTo(e[0] + drop, e[1] + drop);
+            ctx.lineTo(e[2] + drop, e[3] + drop);
+            ctx.stroke();
+        });
+        ctx.globalAlpha = alpha;
+        blades.forEach(e => {
+            ctx.strokeStyle = '#5d4037';
+            ctx.lineWidth = 7;
+            ctx.beginPath();
+            ctx.moveTo(e[0], e[1]);
+            ctx.lineTo(e[2], e[3]);
+            ctx.stroke();
+            ctx.strokeStyle = '#fff8e1';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        });
+        ctx.globalAlpha = 1;
+        ctx.lineCap = 'butt';
     }
 
     function drawBall(p) {

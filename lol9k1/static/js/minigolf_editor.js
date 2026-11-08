@@ -48,6 +48,15 @@ window.lol9k1MinigolfEditorTools = (function () {
         if (!Array.isArray(h.cup)) {
             h.cup = [530, 200];
         }
+        // a pasted windmill missing a part gets the one a new windmill has, the game can't draw it otherwise
+        h.rotors = h.rotors.filter(r => r && typeof r === 'object').map(r => {
+            const n = (v, d) => Number.isFinite(v) ? v : d;
+            const cx = n(r.cx, 320), cy = n(r.cy, 200);
+            const door = Array.isArray(r.door) && r.door.length === 2 && r.door.every(Number.isFinite)
+                ? r.door : [cx - 20, cx + 20];
+            return Object.assign({}, r, {cx, cy, len: n(r.len, 80), speed: n(r.speed, 1.3),
+                blades: n(r.blades, 3), door});
+        });
         return h;
     }
 
