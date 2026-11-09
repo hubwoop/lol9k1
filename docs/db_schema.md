@@ -72,6 +72,26 @@ class minigolf_moves {
    text data
    text played_at
 }
+class minigolf_pack_versions {
+   integer pack
+   integer number
+   text holes
+   integer hole_count
+   integer par
+   text published_at
+   integer id
+}
+class minigolf_packs {
+   integer author
+   text name
+   text hint
+   integer based_on
+   integer version
+   text status
+   text created_at
+   text updated_at
+   integer id
+}
 class minigolf_rounds {
    integer user
    text course
@@ -121,6 +141,9 @@ minigolf_game_players  -->  users : user➡️id
 minigolf_games  -->  users : host➡️id
 minigolf_moves  -->  minigolf_games : game➡️id
 minigolf_moves  -->  users : user➡️id
+minigolf_pack_versions  -->  minigolf_packs : pack➡️id
+minigolf_packs  -->  minigolf_packs : based_on➡️id
+minigolf_packs  -->  users : author➡️id
 minigolf_rounds  -->  users : user➡️id
 tournament_participants  -->  events : tournament➡️id
 tournament_participants  -->  teams : team➡️id

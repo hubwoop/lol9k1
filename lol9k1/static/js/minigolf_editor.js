@@ -5,7 +5,8 @@
  * The game on the page (static/js/minigolf.js in editor mode, see window.lol9k1Minigolf) draws the hole
  * being edited, windmills and sliders moving, and plays it on a test run. The editor draws its grid,
  * handles and helpers on a canvas of its own on top of the game's.
- * Everything stays in this browser: the workspace is kept in localStorage, nothing goes to the server.
+ * The workspace is kept in localStorage. Nothing goes to the server until the pack is published for
+ * everybody to play (see the shared map packs in lol9k1/minigolf.py), which takes every hole holed in a test run.
  */
 
 /*
@@ -573,7 +574,10 @@ window.lol9k1MinigolfEditorTools = (function () {
     const CX = W / 2, CY = H / 2;
     const TEE = 14;                 // half the size of a tee box
     const STORAGE_KEY = 'minigolfEditor';
+    const TESTED_KEY = 'minigolfEditorTested';
+    const MAX_TESTED = 500;         // holes remembered as holed in a test run
     const MIN_SIZE = 4;
+    const LIMITS = JSON.parse(root.dataset.limits || '{}');
 
     const $ = id => document.getElementById(id);
     const stage = document.querySelector('#minigolf .minigolfStage');
@@ -589,7 +593,9 @@ window.lol9k1MinigolfEditorTools = (function () {
     overlay.height = H * dpr;
 
     // ---------------------------------------------------------------- the workspace
-    let pack = null;            // {id, name, hint, holes: [normalized holes]}
+    // {id, name, hint, holes: [normalized holes], shared}: shared is the shared pack it was loaded from or
+    // published as, {id, name, author, mine, version}, so publishing it again is an update or credits it
+    let pack = null;
     let current = 0;            // the hole being edited
     let selected = null;        // {kind, i, v}: kind outline | cup | one of T.LISTS, i its index, v a corner
     let tool = 'select';
@@ -602,6 +608,24 @@ window.lol9k1MinigolfEditorTools = (function () {
 
     function hole() {
         return pack.holes[current];
+    }
+
+    // a shared pack as /minigolf/api/packs/<id> has it
+    function loadShared(data) {
+        pack = {id: data.name.toLowerCase().replace(/\W+/g, '_').replace(/^_+|_+$/g, '') || 'shared',
+            name: data.name, hint: data.hint || '', holes: data.holes_data.map(T.normalize),
+            shared: {id: data.id, name: data.name, author: data.author, mine: data.mine, version: data.version}};
+        current = 0;
+        selected = null;
+    }
+
+    function fetchShared(id) {
+        return fetch(`${root.dataset.packsUrl}/${encodeURIComponent(id)}`, {credentials: 'include'}).then(response => {
+            if (!response.ok || response.redirected) {
+                throw new Error(response.status === 404 ? 'there is no such pack' : `HTTP ${response.status}`);
+            }
+            return response.json();
+        });
     }
 
     function loadPack(id) {
@@ -649,6 +673,51 @@ window.lol9k1MinigolfEditorTools = (function () {
             restore(redoStack.pop());
             changed();
         }
+    }
+
+    // ---------------------------------------------------------------- holes holed in a test run
+    // By what they are, not where they are in the pack: a hole that's changed has to be holed again.
+    let tested = [];
+    try {
+        tested = JSON.parse(localStorage.getItem(TESTED_KEY) || '[]');
+        if (!Array.isArray(tested)) {
+            tested = [];
+        }
+    } catch (e) { /* storage blocked or garbage in it */ }
+
+    function canonical(value) {
+        if (Array.isArray(value)) {
+            return `[${value.map(canonical).join(',')}]`;
+        }
+        if (value && typeof value === 'object') {
+            return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;
+        }
+        return JSON.stringify(value);
+    }
+
+    // a hash of the hole as the game plays it (FNV-1a), for remembering it
+    function holeKey(h) {
+        const text = canonical(T.toDef(h));
+        let hash = 0x811c9dc5;
+        for (let i = 0; i < text.length; i++) {
+            hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+        }
+        return `${(hash >>> 0).toString(16)}:${text.length}`;
+    }
+
+    function isTested(h) {
+        return tested.includes(holeKey(h));
+    }
+
+    function markTested(key) {
+        if (tested.includes(key)) {
+            return;
+        }
+        tested.push(key);
+        tested = tested.slice(-MAX_TESTED);
+        try {
+            localStorage.setItem(TESTED_KEY, JSON.stringify(tested));
+        } catch (e) { /* storage blocked, it lasts as long as the page */ }
     }
 
     function save() {
@@ -1178,7 +1247,14 @@ window.lol9k1MinigolfEditorTools = (function () {
             testing = true;
             selected = null;
             drag = null;
-            game.test(T.toDef(hole()), parseInt($('mgePlayers').value, 10) || 1);
+            // nothing can be changed during a test run, so this is the hole that's played
+            const key = holeKey(hole());
+            game.test(T.toDef(hole()), parseInt($('mgePlayers').value, 10) || 1, holed => {
+                if (holed) {
+                    markTested(key);
+                    renderPanels();
+                }
+            });
         }
         root.dataset.testing = String(testing);
         overlay.hidden = testing;
@@ -1203,10 +1279,35 @@ window.lol9k1MinigolfEditorTools = (function () {
     }
 
     $('mgeLoad').addEventListener('click', function () {
+        const value = $('mgeLoadPack').value;
+        if (value.startsWith('shared:')) {
+            openShared(value.slice('shared:'.length));
+            return;
+        }
         checkpoint();
-        loadPack($('mgeLoadPack').value);
+        loadPack(value);
         changed();
     });
+
+    // loads a shared pack into the workspace, which can be undone like anything else
+    function openShared(id, holeNumber) {
+        const message = $('mgePublishMessage');
+        message.textContent = 'Loading the pack...';
+        return fetchShared(id).then(data => {
+            checkpoint();
+            loadShared(data);
+            current = Math.max(0, Math.min(pack.holes.length - 1, (holeNumber || 1) - 1));
+            const option = $('mgeLoadPack').querySelector(`option[value="shared:${data.id}"]`);
+            if (option) {
+                $('mgeLoadPack').value = option.value;
+            }
+            changed();
+            message.textContent = data.mine ? `Loaded your pack ${data.name}.`
+                : `Loaded ${data.name} by ${data.author}. Test it, change it, publish it as a pack of your own.`;
+        }).catch(error => {
+            message.textContent = `Couldn't load the pack: ${error.message}.`;
+        });
+    }
 
     function packField(id, key) {
         $(id).addEventListener('change', function () {
@@ -1307,6 +1408,10 @@ window.lol9k1MinigolfEditorTools = (function () {
             if (i === current) {
                 b.setAttribute('aria-current', 'true');
             }
+            if (isTested(ho)) {
+                b.dataset.tested = 'true';
+                b.title = 'Holed in a test run';
+            }
             const problems = T.check(ho, W, H);
             if (problems.length) {
                 b.dataset.problems = problems.some(c => c.level === 'error') ? 'error' : 'warning';
@@ -1322,6 +1427,7 @@ window.lol9k1MinigolfEditorTools = (function () {
         $('mgeRedo').disabled = testing || !redoStack.length;
         renderSelection();
         renderChecks();
+        renderShare();
         showCoords();
     }
 
@@ -1525,12 +1631,99 @@ window.lol9k1MinigolfEditorTools = (function () {
             ul.appendChild(li);
         });
         // and for the pack: the server knows how many holes its packs have
-        const known = SERVER_COURSES[pack.id];
+        const known = !pack.shared && SERVER_COURSES[pack.id];
         $('mgePackNote').textContent = known && known.holes !== pack.holes.length
             ? `The server expects ${known.holes} holes in ${known.name}, this pack has ${pack.holes.length}: `
                 + 'change it in COURSES in lol9k1/minigolf.py too.'
             : '';
     }
+
+    // ---------------------------------------------------------------- publishing
+    // What keeps the pack from being published, the server checks the rest.
+    function blockers() {
+        const out = [];
+        if (!pack.name.trim()) {
+            out.push('The pack needs a name.');
+        } else if (pack.name.trim().length > LIMITS.name) {
+            out.push(`The name of the pack is longer than ${LIMITS.name} characters.`);
+        }
+        if ((pack.hint || '').trim().length > LIMITS.hint) {
+            out.push(`The hint is longer than ${LIMITS.hint} characters.`);
+        }
+        if (pack.holes.length > LIMITS.holes) {
+            out.push(`A pack has ${LIMITS.holes} holes at most, this one has ${pack.holes.length}.`);
+        }
+        pack.holes.forEach((h, i) => {
+            const what = `Hole ${i + 1} (${h.name})`;
+            if (T.check(h, W, H).some(c => c.level === 'error')) {
+                out.push(`${what} has problems, see its checks.`);
+            } else if (!isTested(h)) {
+                out.push(`${what} hasn't been holed in a test run yet.`);
+            }
+        });
+        return out;
+    }
+
+    function updating() {
+        return !!(pack.shared && pack.shared.mine);
+    }
+
+    function renderShare() {
+        const problems = blockers();
+        const list = $('mgeShareBlockers');
+        list.textContent = '';
+        problems.forEach(text => {
+            const li = document.createElement('li');
+            li.className = 'warning';
+            li.textContent = text;
+            list.appendChild(li);
+        });
+        const shared = pack.shared;
+        $('mgeShareStatus').textContent = !shared ? 'This pack is only in your browser.'
+            : shared.mine ? `This is your shared pack ${shared.name}, version ${shared.version}.`
+                : `Made from ${shared.name} by ${shared.author}. Published, it's a pack of your own that credits theirs.`;
+        $('mgePublish').textContent = updating() ? `Publish update (version ${shared.version + 1})` : 'Publish';
+        $('mgePublish').disabled = testing || problems.length > 0;
+        $('mgePublishNew').hidden = !updating();
+        $('mgePublishNew').disabled = testing || problems.length > 0;
+    }
+
+    function publish(asNew) {
+        const message = $('mgePublishMessage');
+        const update = updating() && !asNew;
+        const body = {name: pack.name.trim(), hint: (pack.hint || '').trim(), holes: pack.holes.map(T.toDef)};
+        if (!update && pack.shared) {
+            body.based_on = pack.shared.id;
+        }
+        message.textContent = 'Publishing...';
+        $('mgePublish').disabled = $('mgePublishNew').disabled = true;
+        fetch(update ? `${root.dataset.packsUrl}/${pack.shared.id}` : root.dataset.packsUrl, {
+            method: update ? 'PUT' : 'POST',
+            credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        }).then(response => response.json().catch(() => null).then(data => {
+            if (!response.ok || response.redirected) {
+                throw new Error(typeof data === 'string' ? data : `HTTP ${response.status}`);
+            }
+            return data;
+        })).then(data => {
+            pack.shared = {id: data.id, name: data.name, author: data.author, mine: true, version: data.version};
+            save();
+            message.textContent = `Published ${data.name}, version ${data.version}. `;
+            const link = document.createElement('a');
+            link.href = root.dataset.browseUrl;
+            link.textContent = 'See it with the other packs';
+            message.appendChild(link);
+        }).catch(error => {
+            message.textContent = error.message === 'not logged in'
+                ? 'You were logged out. Log in again in another tab, then publish again.'
+                : `Couldn't publish the pack: ${error.message}.`;
+        }).finally(renderShare);
+    }
+
+    $('mgePublish').addEventListener('click', () => publish(false));
+    $('mgePublishNew').addEventListener('click', () => publish(true));
 
     // ---------------------------------------------------------------- export & import
     function exportText(text, what) {
@@ -1755,6 +1948,15 @@ window.lol9k1MinigolfEditorTools = (function () {
     setTool('select');
     game.preview(T.toDef(hole()));
     renderPanels();
+    // ?pack=<id>&hole=<number>: test a shared pack, from the browser of shared packs (/minigolf/packs).
+    // Undo takes the workspace back to what it was, and the address loses the pack so a reload keeps the edits.
+    (function () {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('pack')) {
+            openShared(params.get('pack'), parseInt(params.get('hole'), 10) || 1);
+            history.replaceState(null, '', window.location.pathname);
+        }
+    })();
     // for tests and the browser console
     window.lol9k1MinigolfEditor = {
         get pack() {

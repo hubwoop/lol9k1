@@ -7,7 +7,10 @@
 {% block body %}
   <div id="minigolfEditor" class="minigolfEditor"
        data-width="{{ course_width }}" data-height="{{ course_height }}"
-       data-courses="{{ courses|tojson|forceescape }}">
+       data-courses="{{ courses|tojson|forceescape }}"
+       data-packs-url="{{ url_for('minigolf.packs_api') }}"
+       data-browse-url="{{ url_for('minigolf.packs_page') }}"
+       data-limits="{{ limits|tojson|forceescape }}">
     <div class="mgeToolbar" role="toolbar" aria-label="Editor tools">
       <span class="mgeTools" id="mgeTools">
         <button type="button" class="minigolfButton" data-tool="select" title="Select and move things, drag their handles (V)">↖ Select</button>
@@ -57,6 +60,11 @@
             <select id="mgeLoadPack" aria-label="Pack to load">
               {% for id, c in courses.items() %}<option value="{{ id }}">{{ c.name }}</option>{% endfor %}
               <option value="">A new pack</option>
+              {% if shared %}
+                <optgroup label="Shared by players">
+                  {% for p in shared %}<option value="shared:{{ p.id }}">{{ p.name }} by {{ p.author }}</option>{% endfor %}
+                </optgroup>
+              {% endif %}
             </select>
             <button type="button" class="minigolfButton" id="mgeLoad">Load</button>
           </p>
@@ -90,6 +98,24 @@
       </fieldset>
     </div>
 
+    <section class="mgeShare" aria-labelledby="mgeShareTitle">
+      <h4 id="mgeShareTitle">Share</h4>
+      <p id="mgeShareStatus" class="minigolfHint"></p>
+      <ul id="mgeShareBlockers" class="mgeChecks" aria-label="Before publishing"></ul>
+      <p class="mgeRow">
+        <button type="button" class="minigolfButton minigolfButtonBig" id="mgePublish">Publish</button>
+        <button type="button" class="minigolfButton" id="mgePublishNew" hidden>Publish as a new pack</button>
+        <span id="mgePublishMessage" class="minigolfHint" role="status"></span>
+      </p>
+      <p class="minigolfHint">
+        Everybody can play the packs you publish, and test and change them in their own editor:
+        <a href="{{ url_for('minigolf.packs_page') }}">🗺 browse the shared packs</a>.
+        Every hole has to be holed in a test run before the pack can be published.
+        Up to {{ limits.packs }} packs each, with up to {{ limits.holes }} holes.
+        An update starts a new Hall of Fame, as the holes aren't the same anymore.
+      </p>
+    </section>
+
     <div class="mgeExport">
       <div>
         <h4>Export</h4>
@@ -120,7 +146,8 @@
         <kbd>T</kbd> starts and stops a test run.
       </p>
       <p>
-        Your work stays in this browser. When you're happy, <b>Copy pack</b> and paste the code into
+        Your work stays in this browser until you <b>Publish</b> it for everybody to play. To make it a pack that comes
+        with the game, <b>Copy pack</b> and paste the code into
         <code>lol9k1/static/js/minigolf.js</code> (the holes) and <code>lol9k1/minigolf.py</code> (the number of holes).
       </p>
       <p><a href="{{ url_for('minigolf.minigolf') }}">⛳ Back to the game</a></p>
