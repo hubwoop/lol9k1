@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from playwright.sync_api import Page, expect
 
-from conftest import login
+from conftest import expect_flash, login
 from test_minigolf import game, putt, wait_for_turn
 from test_minigolf_network import game_id, holed, shot, status
 
@@ -103,7 +103,9 @@ def test_an_update_is_a_new_version_and_played_versions_are_kept(page: Page, see
     # the first version was played, so it stays with its Hall of Fame, but new games are on the new one
     assert page.request.get('/minigolf/api/leaderboard?course=pack:1').json()['best'][0]['best'] == 27
     assert page.request.get('/minigolf/api/courses/pack:1').json()['name'] == 'Lanes (v1)'
-    assert page.request.post('/minigolf/api/games', data={'course': 'pack:1'}).status == 409
+    response = page.request.post('/minigolf/api/games', data={'course': 'pack:1'})
+    assert (response.status, response.json()) == \
+        (409, 'that is an older version of the pack, pick its latest version to host a game')
     assert page.request.post('/minigolf/api/games', data={'course': 'pack:2'}).status == 201
 
     # the same holes under a new name aren't a new version
@@ -119,15 +121,28 @@ def test_an_update_is_a_new_version_and_played_versions_are_kept(page: Page, see
 
     bob_page = new_user_page(bob)
     assert update(bob_page, 1, 'Mine now', holes).status == 403
+    # whose pack it is comes first, whatever is wrong with the pack
+    assert update(bob_page, 1, ' ', []).status == 403
 
-    # versions nobody played go once they've been out of date for a while
+    # versions nobody played go once they've been out of date for a while, which is days: a hot seat round
+    # may still be played on one
     update(page, 1, 'Lovely Lanes', holes[:2])  # version 3, version 2 has a game on it
     update(page, 1, 'Lovely Lanes', holes[:1])  # version 4
-    a_while_ago = (datetime.now() - timedelta(hours=3)).isoformat(timespec='seconds')
+    a_while_ago = (datetime.now() - timedelta(days=2)).isoformat(timespec='seconds')
     seed.query('update minigolf_pack_versions set published_at = ?', [a_while_ago])
     update(page, 1, 'Lovely Lanes', holes[:4])  # version 5
+    assert [r['number'] for r in seed.query('select number from minigolf_pack_versions order by number')] == \
+        [1, 2, 3, 4, 5]
+    update(page, 1, 'Lovely Lanes', holes[:1])  # version 6
+    a_while_ago = (datetime.now() - timedelta(days=4)).isoformat(timespec='seconds')
+    seed.query('update minigolf_pack_versions set published_at = ?', [a_while_ago])
+    update(page, 1, 'Lovely Lanes', holes[:4])  # version 7
     versions = [r['number'] for r in seed.query('select number from minigolf_pack_versions order by number')]
-    assert versions == [1, 2, 4, 5]
+    assert versions == [1, 2, 6, 7]
+    # a round on a version that's gone tells so, the game says it's gone
+    response = page.request.post('/minigolf/api/rounds', data={'course': 'pack:3', 'strokes': [2] * 2})
+    assert (response.status, response.json()) == (404, 'there is no such pack anymore, it may have been updated')
+    assert page.request.post('/minigolf/api/rounds', data={'course': 'nope', 'strokes': [2]}).status == 400
 
 
 def test_a_pack_is_withdrawn_by_its_author_or_an_admin(page: Page, seed, alice, bob, admin, new_user_page):
@@ -311,7 +326,7 @@ def test_every_player_stores_a_limited_number_of_versions(page: Page, seed, alic
     assert 'versions of your packs stored, 50 at most' in response.json()
 
     # versions nobody played go a while after they're replaced, then there's room again
-    a_while_ago = (datetime.now() - timedelta(hours=3)).isoformat(timespec='seconds')
+    a_while_ago = (datetime.now() - timedelta(days=4)).isoformat(timespec='seconds')
     seed.query('update minigolf_pack_versions set published_at = ?', [a_while_ago])
     assert update(page, 1, 'Busy', holes[:3]).status == 200
     assert [r['number'] for r in seed.query('select number from minigolf_pack_versions')] == [50, 51]
@@ -327,11 +342,11 @@ def test_a_withdrawn_pack_nobody_played_goes_after_a_while(page: Page, seed, ali
     page.request.delete('/minigolf/api/packs/2')
     # a pack made from it still credits it while it's there
     bob_page = new_user_page(bob)
-    assert publish(bob_page, 'Remix', holes[:1], based_on=1).json()['based_on']['name'] == 'Gone'
+    assert publish(bob_page, 'Remix', holes[1:2], based_on=1).json()['based_on']['name'] == 'Gone'
     assert publish(bob_page, 'Remix of nothing', holes[:1], based_on=99).json()['based_on'] is None
     assert publish(bob_page, 'Bad credit', holes[:1], based_on='1').status == 400
 
-    a_while_ago = (datetime.now() - timedelta(hours=3)).isoformat(timespec='seconds')
+    a_while_ago = (datetime.now() - timedelta(days=4)).isoformat(timespec='seconds')
     seed.query('update minigolf_packs set updated_at = ? where id in (1, 2)', [a_while_ago])
     publish(page, 'Next', holes[:1])
     # Bob's packs 3 and 4 and the new 5 stay, so does 2, which has been played
@@ -445,12 +460,19 @@ def test_a_pack_that_cant_be_loaded_can_be_tried_again(page: Page, seed, alice, 
     bob_page.route('**/minigolf/api/courses/**', flaky)
     bob_page.goto('/minigolf/')
     bob_page.get_by_label('Map pack').select_option(label='Lanes by Alice')
-    expect(status(bob_page)).to_have_text("Lanes couldn't be loaded: down for a moment. Click again to try again.")
+    # it's said next to the picker, with a button to try again
+    notice = bob_page.locator('#minigolfCourseNotice')
+    expect(notice).to_have_text("Couldn't load Lanes. Check your connection and try again. Retry")
+    expect(status(bob_page)).to_have_text("Couldn't load Lanes. Check your connection and try again.")
+    bob_page.get_by_role('button', name='Retry').click()
+    expect(notice).to_contain_text("Couldn't load Lanes")
+    # so does teeing off
     bob_page.get_by_role('button', name='Tee off!').click()
-    expect(status(bob_page)).to_contain_text("couldn't be loaded")
+    expect(notice).to_contain_text("Couldn't load Lanes")
     failing['on'] = False
-    bob_page.get_by_role('button', name='Tee off!').click()
+    bob_page.get_by_role('button', name='Retry').click()
     expect(status(bob_page)).to_have_text('Ready.')
+    expect(notice).to_be_hidden()
     bob_page.get_by_role('button', name='Tee off!').click()
     wait_for_turn(bob_page)
     expect(game(bob_page)).to_have_attribute('data-hole', '1')
@@ -468,3 +490,57 @@ def test_a_pack_without_a_length_is_refused(page: Page, alice, live_server):
                        headers={'Cookie': cookie, 'Content-Type': 'application/json'}, encode_chunked=True)
     response = connection.getresponse()
     assert (response.status, json.loads(response.read())) == (411, 'the request has no Content-Length')
+
+
+def test_a_copy_of_a_shared_pack_isnt_a_pack_of_your_own(page: Page, seed, alice, bob, new_user_page):
+    login(page, alice)
+    holes = builtin_holes(page)[:2]
+    publish(page, 'Lanes', holes)
+    bob_page = new_user_page(bob)
+    response = publish(bob_page, 'My Lanes', holes, based_on=1)
+    assert (response.status, response.json()) == (409, "change something first, it's the same as Lanes by Alice")
+    assert publish(bob_page, 'My Lanes', holes[:1], based_on=1).status == 201
+
+
+def test_an_old_link_to_a_pack_says_what_can_be_played(page: Page, seed, alice):
+    login(page, alice)
+    holes = builtin_holes(page)
+    publish(page, 'Lanes', holes[:1])
+    page.request.post('/minigolf/api/rounds', data={'course': 'pack:1', 'strokes': [2]})  # so version 1 is kept
+    update(page, 1, 'Lanes', holes[:2])
+    notice = page.locator('#minigolfCourseNotice')
+    host = page.get_by_role('button', name='Host a network game')
+
+    # an older version can still be played hot seat, the latest one is a click away
+    page.goto('/minigolf/?course=pack:1')
+    expect(page.get_by_label('Map pack')).to_have_value('pack:1')
+    expect(notice).to_contain_text('This is an older version of the pack: hot seat only')
+    expect(host).to_be_disabled()
+    page.get_by_role('link', name='Play Lanes, its latest version').click()
+    expect(page.get_by_label('Map pack')).to_have_value('pack:2')
+    expect(notice).to_be_hidden()
+    expect(host).to_be_enabled()
+
+    # so can a withdrawn pack
+    page.request.delete('/minigolf/api/packs/1')
+    page.goto('/minigolf/?course=pack:2')
+    expect(notice).to_have_text("This pack was withdrawn: hot seat only, it can't be hosted over the network.")
+    expect(host).to_be_disabled()
+    response = page.request.post('/minigolf/api/games', data={'course': 'pack:2'})
+    assert (response.status, response.json()) == (409, 'that pack has been withdrawn, it can only be played hot seat now')
+    page.get_by_label('Map pack').select_option('classic')
+    expect(host).to_be_enabled()
+
+    # and one that isn't there at all falls back to the classic pack, saying so
+    page.goto('/minigolf/?course=pack:99')
+    expect_flash(page, "That map pack doesn't exist anymore, here's Classic.")
+    expect(page.get_by_label('Map pack')).to_have_value('classic')
+    page.goto('/minigolf/')
+    expect(page.get_by_role('alert')).to_have_count(0)
+
+
+def test_the_editor_knows_every_limit(page: Page, alice):
+    login(page, alice)
+    page.goto('/minigolf/editor')
+    limits = json.loads(page.locator('#minigolfEditor').get_attribute('data-limits'))
+    assert (limits['bumper'], limits['speed'], limits['blades']) == (80, 10, 8)

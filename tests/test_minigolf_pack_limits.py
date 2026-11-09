@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from lol9k1.minigolf_packs import (LIST_LIMITS, MAX_BYTES, MAX_HOLES, MAX_WALL_CORNERS, PackError, clean_text,
-                                   validate_holes)
+from lol9k1.minigolf_packs import (ITEM_NAMES, LIST_LIMITS, MAX_BYTES, MAX_HOLES, MAX_WALL_CORNERS, PackError,
+                                   clean_text, validate_holes)
 
 W, H, MAX_STROKES = 640, 400, 10
 
@@ -69,8 +69,18 @@ def test_a_pack_has_a_sensible_number_of_holes(holes):
 
 
 def test_every_list_has_a_limit():
-    refused('bumpers must be a list of at most', hole(bumpers=[[200, 160, 5]] * (LIST_LIMITS['bumpers'] + 1)))
-    refused('rotors must be a list', hole(rotors={'cx': 1}))
+    refused('hole 1: it has 31 bumpers, 30 at most', hole(bumpers=[[200, 160, 5]] * (LIST_LIMITS['bumpers'] + 1)))
+    refused('hole 1: the windmills must be a list', hole(rotors={'cx': 1}))
+    refused('it has 31 sand areas, 30 at most', hole(sand=[[200, 150, 40, 40]] * (LIST_LIMITS['sand'] + 1)))
+
+
+def test_things_are_called_what_the_editor_calls_them():
+    """Every list has a name for its players, rotors are windmills."""
+    assert set(ITEM_NAMES) == set(LIST_LIMITS)
+    refused('the length of the blades of windmill 1', hole(rotors=[{'cx': 1, 'cy': 1, 'len': 0, 'speed': 1, 'blades': 3,
+                                                                    'door': [0, 1]}]))
+    refused('the x of sand area 2', hole(sand=[[200, 150, 40, 40], [1e9, 150, 40, 40]]))
+    refused('the y of water 1', hole(water=[[200, 1e9, 40, 40]]))
 
 
 def test_walls_have_a_limit_of_corners_all_together():

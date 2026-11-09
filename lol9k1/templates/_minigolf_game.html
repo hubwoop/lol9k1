@@ -33,6 +33,8 @@
             {% endif %}
           </select>
         </p>
+        {#- why the picked pack can't be loaded, or can only be played hot seat -#}
+        <p id="minigolfCourseNotice" class="minigolfHint" role="status" hidden></p>
         <p id="minigolfCourseHint" class="minigolfHint"></p>
         <p class="minigolfHint">Hot seat for up to {{ max_players }} players. Take turns on this computer!</p>
         <ol id="minigolfPlayers"></ol>

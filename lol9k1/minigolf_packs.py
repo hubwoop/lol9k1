@@ -30,6 +30,10 @@ MAX_TEES = 8           # the game has a colour for 8 players
 MAX_CORNERS = 32       # of a polygon
 MAX_WALL_CORNERS = 200  # of the outline and all the blocks of a hole together
 LIST_LIMITS = {'blocks': 40, 'sand': 30, 'water': 30, 'boosts': 30, 'bumpers': 30, 'sliders': 12, 'rotors': 4}
+# what the map editor calls the things in those lists, one and more of them, for the messages to its players
+ITEM_NAMES = {'blocks': ('block', 'blocks'), 'sand': ('sand area', 'sand areas'), 'water': ('water', 'water areas'),
+              'boosts': ('boost', 'boosts'), 'bumpers': ('bumper', 'bumpers'), 'sliders': ('slider', 'sliders'),
+              'rotors': ('windmill', 'windmills')}
 MAX_SPEED = 10         # of windmills and sliders, in radians per second
 MAX_BLADES = 8
 MAX_BUMPER = 80        # radius
@@ -121,9 +125,12 @@ class _Hole:
     def items(self, hole: dict, key: str, clean_one: Callable) -> list:
         value = hole.get(key, [])
         limit = LIST_LIMITS[key]
-        if not isinstance(value, list) or len(value) > limit:
-            self.fail(f'{key} must be a list of at most {limit}')
-        return [clean_one(item, f'{key[:-1] if key.endswith("s") else key} {i + 1}') for i, item in enumerate(value)]
+        one, many = ITEM_NAMES[key]
+        if not isinstance(value, list):
+            self.fail(f'the {many} must be a list')
+        if len(value) > limit:
+            self.fail(f'it has {len(value)} {many}, {limit} at most')
+        return [clean_one(item, f'{one} {i + 1}') for i, item in enumerate(value)]
 
     def area(self, value, what: str, extra: int = 0) -> list:
         """A rect [x, y, w, h], plus extra numbers that the caller checks."""

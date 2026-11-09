@@ -20,11 +20,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
-from flask import Blueprint, current_app, g, render_template, request, session
+from flask import Blueprint, current_app, flash, g, render_template, request, session
 
 from lol9k1 import events, minigolf_packs
 from lol9k1.auth import auth
 from lol9k1.database import get_db
+from lol9k1.utilities import STYLE
 
 bp = Blueprint('minigolf', __name__, url_prefix='/minigolf')
 
@@ -75,7 +76,11 @@ ROUNDS = '''
 @auth.login_required
 def minigolf() -> str:
     # ?course= picks a pack, e.g. a shared one from the browser (/minigolf/packs)
-    course = known_course(request.args.get('course', COURSE)) or COURSE
+    course = known_course(request.args.get('course', COURSE))
+    if course is None:
+        # an old link, or a version nobody played that's gone since
+        flash(f"That map pack doesn't exist anymore, here's {COURSES[COURSE]['name']}.", STYLE.warning)
+        course = COURSE
     courses = playable_courses()
     if course not in courses:
         # an older version or a withdrawn pack can still be played, it's just not offered
@@ -106,6 +111,9 @@ def submit_round_api():
     if not isinstance(payload, dict):
         return json.dumps('expected a JSON object'), 400
     course = known_course(payload.get('course', COURSE))
+    if course is None and _shared_version(payload.get('course')) is not None:
+        # a version nobody played that's gone since the round started, the game tells the player so
+        return json.dumps(GONE_PACK), 404
     if course is None:
         return json.dumps(UNKNOWN_COURSE), 400
     holes = course_info(course)['holes']
@@ -125,6 +133,7 @@ def save_round(db: sqlite3.Connection, user: int, course: str, strokes: list[int
 
 
 UNKNOWN_COURSE = f'course must be one of {", ".join(COURSES)} or a shared pack ({SHARED_PREFIX}<version>)'
+GONE_PACK = 'there is no such pack anymore, it may have been updated'
 
 
 def known_course(value) -> Optional[str]:
@@ -146,8 +155,9 @@ def _shared_version(course) -> Optional[int]:
 
 
 def course_info(course: str) -> Optional[dict]:
-    """A course by its id: its name and number of holes, and for a shared pack who made it and whether new games
-    can be hosted on it (it's the pack's current version and it isn't withdrawn). None if there's no such course."""
+    """A course by its id: its name and number of holes, and for a shared pack who made it, whether new games
+    can be hosted on it (playable: it's the pack's current version and it isn't withdrawn), whether the pack is
+    withdrawn and the course of its current version (latest). None if there's no such course."""
     if course in COURSES:
         return {**COURSES[course], 'shared': False, 'playable': True}
     version = _shared_version(course)
@@ -162,12 +172,17 @@ def course_info(course: str) -> Optional[dict]:
             join users u on p.author = u.id
           where v.id = ?
         ''', [version]).fetchone()
-        cache[course] = None if row is None else {
-            'name': row['name'] if row['version'] == version else f"{row['name']} (v{row['number']})",
-            'holes': row['hole_count'], 'shared': True, 'pack': row['id'], 'author': row['author'],
-            'playable': row['status'] == 'listed' and row['version'] == version,
-        }
+        cache[course] = None if row is None else _shared_course(
+            row['name'] if row['version'] == version else f"{row['name']} (v{row['number']})",
+            row['hole_count'], row['id'], row['author'], row['status'], row['version'], version)
     return cache[course]
+
+
+def _shared_course(name: str, holes: int, pack: int, author: str, status: str, latest: int, version: int) -> dict:
+    """A shared pack's version as course_info has it, from the pack and its current version (latest)."""
+    return {'name': name, 'holes': holes, 'shared': True, 'pack': pack, 'author': author,
+            'playable': status == 'listed' and latest == version, 'withdrawn': status != 'listed',
+            'latest': f'{SHARED_PREFIX}{latest}'}
 
 
 def course_name(course: str) -> str:
@@ -178,8 +193,13 @@ def course_name(course: str) -> str:
 def playable_courses() -> dict:
     """The packs to pick from: the ones that come with the game, then the shared ones, newest first."""
     courses = {course: course_info(course) for course in COURSES}
+    cache = g.setdefault('minigolf_courses', {})
     for pack in list_packs():
-        courses[pack['course']] = course_info(pack['course'])
+        # list_packs has all course_info needs, so it doesn't look up every pack again
+        course = pack['course']
+        cache[course] = _shared_course(pack['name'], pack['holes'], pack['id'], pack['author'], pack['status'],
+                                       _shared_version(course), _shared_version(course))
+        courses[course] = cache[course]
     return courses
 
 
@@ -509,9 +529,12 @@ def create_game_api():
     course = known_course(payload.get('course', COURSE) if isinstance(payload, dict) else COURSE)
     if course is None:
         raise _ApiError(UNKNOWN_COURSE, 400)
-    if not course_info(course)['playable']:
+    info = course_info(course)
+    if not info['playable']:
         # a new game is on what's on offer, lobbies that are open already can still be played
-        raise MoveError('that pack has been updated or withdrawn, reload the page and pick it again')
+        if info['withdrawn']:
+            raise MoveError('that pack has been withdrawn, it can only be played hot seat now')
+        raise MoveError('that is an older version of the pack, pick its latest version to host a game')
     db = get_db()
     # lobbies nobody started in time aren't offered anymore, so they can go. Played games are kept
     # with their moves, it's one row per putt and a LAN party doesn't putt that much.
@@ -688,9 +711,10 @@ MAX_PACK_REQUEST = minigolf_packs.MAX_BYTES * 2
 # Versions every player may have stored, of all their packs, withdrawn or not. Played versions are kept
 # for good, so this keeps a busy author from filling the disk: 50 versions are 3.2 MB at most.
 MAX_VERSIONS_PER_USER = 50
-# an unplayed version that's out of date, or of a withdrawn pack, goes after this long: somebody may still
-# be playing a round on it
-VERSION_TTL = LOBBY_TTL
+# An unplayed version that's out of date, or of a withdrawn pack, goes after this long. Somebody may still be
+# playing a hot seat round on it, which the server doesn't know about until it's saved, so it's kept for days
+# rather than hours: a version takes MAX_BYTES at most and there are MAX_VERSIONS_PER_USER of them at most.
+VERSION_TTL = timedelta(days=3)
 
 
 class _Conflict(_ApiError):
@@ -705,7 +729,8 @@ def pack_limits() -> dict:
     return {'holes': minigolf_packs.MAX_HOLES, 'name': minigolf_packs.MAX_NAME, 'hint': minigolf_packs.MAX_HINT,
             'packs': MAX_PACKS_PER_USER, 'bytes': minigolf_packs.MAX_BYTES, 'tees': minigolf_packs.MAX_TEES,
             'corners': minigolf_packs.MAX_CORNERS, 'wall_corners': minigolf_packs.MAX_WALL_CORNERS,
-            'lists': minigolf_packs.LIST_LIMITS, 'par': MAX_STROKES}
+            'lists': minigolf_packs.LIST_LIMITS, 'par': MAX_STROKES, 'bumper': minigolf_packs.MAX_BUMPER,
+            'speed': minigolf_packs.MAX_SPEED, 'blades': minigolf_packs.MAX_BLADES}
 
 
 def list_packs(sort: str = 'popular', pack_id: Optional[int] = None, author: Optional[int] = None) -> list[dict]:
@@ -809,18 +834,24 @@ def course_api(course: str):
     known = known_course(course)
     info = known and course_info(known)
     if not info or not info['shared']:
-        raise _ApiError('there is no such pack anymore, it may have been updated', 404)
+        raise _ApiError(GONE_PACK, 404)
     hint = get_db().execute('select hint from minigolf_packs where id = ?', [info['pack']]).fetchone()['hint']
     return json.dumps({'course': known, 'name': info['name'], 'author': info['author'], 'hint': hint,
-                       'playable': info['playable'], 'holes': _holes_of(known)})
+                       'playable': info['playable'], 'withdrawn': info['withdrawn'], 'latest': info['latest'],
+                       'holes': _holes_of(known)})
 
 
-def _pack_payload() -> tuple[dict, str, str, list]:
-    """The request of a pack that's published, and its name, hint and holes, checked. Raises _ApiError."""
+def _check_pack_size() -> None:
+    """Refuses the request of a pack that's too big before its body is read. Raises _ApiError."""
     if request.content_length is None:
         raise _ApiError('the request has no Content-Length', 411)
     if request.content_length > MAX_PACK_REQUEST:
         raise _ApiError(f'a pack may take {minigolf_packs.MAX_BYTES // 1024} KB at most', 413)
+
+
+def _pack_payload() -> tuple[dict, str, str, list]:
+    """The request of a pack that's published, and its name, hint and holes, checked. Raises _ApiError."""
+    _check_pack_size()
     payload = _json_body()
     try:
         name = minigolf_packs.clean_text(payload.get('name'), 'the name of the pack', minigolf_packs.MAX_NAME)
@@ -854,7 +885,7 @@ def _add_version(db: sqlite3.Connection, user: int, pack_id: int, holes: list, m
     if stored >= MAX_VERSIONS_PER_USER:
         db.rollback()
         raise _Conflict(f'you have {stored} versions of your packs stored, {MAX_VERSIONS_PER_USER} at most. '
-                        'Versions nobody played go a while after they are replaced or withdrawn')
+                        f'Versions nobody played go {VERSION_TTL.days} days after they are replaced or withdrawn')
     number = db.execute('select coalesce(max(number), 0) + 1 from minigolf_pack_versions where pack = ?',
                         [pack_id]).fetchone()[0]
     version = db.execute("""insert into minigolf_pack_versions (pack, number, holes, hole_count, par, published_at)
@@ -877,8 +908,14 @@ def publish_pack_api():
         if type(based_on) is not int:
             raise _ApiError('based_on must be the id of a shared pack', 400)
         # a pack it was made from that's gone just isn't credited
-        row = db.execute('select id from minigolf_packs where id = ?', [based_on]).fetchone()
+        row = db.execute('''select p.id, p.name, u.name as author, v.holes from minigolf_packs p
+                              join users u on p.author = u.id
+                              left join minigolf_pack_versions v on v.id = p.version
+                            where p.id = ?''', [based_on]).fetchone()
         based_on = row['id'] if row else None
+        # loading a shared pack in the editor counts its holes as tested, but a copy isn't a pack of your own
+        if row and row['holes'] and json.loads(row['holes']) == holes:
+            raise _Conflict(f"change something first, it's the same as {row['name']} by {row['author']}")
     moment = _timestamp(_now())
     try:
         # the names of a player's listed packs are unique (minigolf_packs_listed_name_unique)
@@ -902,13 +939,15 @@ def publish_pack_api():
 def update_pack_api(pack_id: int):
     """A new version of a pack, by its author. With the same holes it's a new name or hint, no new version.
     Admins can withdraw a pack, but only its author can change it."""
-    _, name, hint, holes = _pack_payload()
+    # who may change the pack is checked before the pack itself, only its size before that
+    _check_pack_size()
     user = session.get('user_id')
     pack = _pack_or_404(pack_id)
     if not pack['mine']:
         raise _ApiError("it's not your pack, publish it as a pack of your own", 403)
     if pack['status'] != 'listed':
         raise _Conflict('the pack has been withdrawn, publish it as a new pack')
+    _, name, hint, holes = _pack_payload()
     db = get_db()
     moment = _timestamp(_now())
     try:

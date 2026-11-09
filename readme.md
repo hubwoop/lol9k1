@@ -48,7 +48,7 @@ editor is kept: *↩ Back to ...* brings it back.
   on earlier versions still count for *most played*.
 - *Withdraw* takes a pack off offer, for its author and the admins. Games on it, open lobbies included,
   can still be played.
-- Versions nobody played are thrown away 2 hours after they're replaced or withdrawn.
+- Versions nobody played are thrown away 3 days after they're replaced or withdrawn.
 - Limits, to keep packs playable on any laptop and the database small: every player shares up to 10 packs
   with names of their own and keeps up to 50 versions, a pack has up to 18 holes and 64 KB, a hole up to
   8 tees, 40 blocks, 30 each of sand, water, boosts and bumpers, 12 sliders, 4 windmills and 200 wall
