@@ -14,7 +14,8 @@
       Packs everybody at the party built in the <a href="{{ url_for('minigolf.editor') }}">🛠 map editor</a> and shared.
       <b>Play</b> one hot seat or over the network, every pack has a Hall of Fame of its own.
       <b>Test</b> one in the editor: click a hole to putt it there, nothing gets saved, and change it into a pack of your own.
-      You can share up to {{ max_packs }} packs.
+      You can share up to {{ max_packs }} packs. An update of a pack starts a fresh Hall of Fame, as its holes
+      aren't the same anymore, but its rounds on earlier versions still count for <i>most played</i>.
     </p>
     <p class="mgpFilters">
       Sort by
@@ -49,12 +50,17 @@
           {% if p.hint %}<p class="mgpHint">{{ p.hint }}</p>{% endif %}
           <p class="mgpFacts">
             {{ p.holes }} hole{{ 's' if p.holes != 1 }}, par {{ p.par }} ·
-            version {{ p.version }}, {{ p.updated_at|replace('T', ' ') }} ·
+            version {{ p.version }}, {{ p.published_at|replace('T', ' ') }} ·
             {% if p.rounds %}
               {{ p.rounds }} round{{ 's' if p.rounds != 1 }} by {{ p.players }} player{{ 's' if p.players != 1 }},
               best {{ p.best.total }} by {{ p.best.name }}
+            {% elif p.rounds_all %}
+              nobody played this version yet
             {% else %}
               nobody played it yet
+            {% endif %}
+            {% if p.rounds_all > p.rounds %}
+              ({{ p.rounds_all - p.rounds }} round{{ 's' if p.rounds_all - p.rounds != 1 }} on earlier versions)
             {% endif %}
             {% if p.based_on %} · made from {{ p.based_on.name }} by {{ p.based_on.author }}{% endif %}
           </p>
@@ -70,5 +76,7 @@
   </div>
 {% endblock %}
 {% block endofbody %}
+  {#- for its colours, the game itself only starts on the minigolf page -#}
+  <script src="{{ url_for('static', filename='js/minigolf.js') }}"></script>
   <script src="{{ url_for('static', filename='js/minigolf_packs.js') }}"></script>
 {% endblock %}

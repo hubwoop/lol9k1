@@ -110,6 +110,13 @@ def test_an_update_is_a_new_version_and_played_versions_are_kept(page: Page, see
     response = update(page, 1, 'Lovely Lanes', holes[:3])
     assert (response.json()['name'], response.json()['version']) == ('Lovely Lanes', 2)
 
+    # its rounds on earlier versions still count for "most played"
+    [listed] = packs(page)
+    assert (listed['rounds'], listed['rounds_all']) == (0, 1)
+    page.goto('/minigolf/packs')
+    expect(page.get_by_role('listitem', name='Lovely Lanes')).to_contain_text(
+        'nobody played this version yet (1 round on earlier versions)')
+
     bob_page = new_user_page(bob)
     assert update(bob_page, 1, 'Mine now', holes).status == 403
 
@@ -208,6 +215,8 @@ def test_browse_test_and_play_somebody_elses_pack(page: Page, seed, alice, bob, 
         'Loaded Warm Ups by Alice. Test it, change it, publish it as a pack of your own.')
     expect(bob_page.locator('#mgeHoles button[aria-current="true"]')).to_have_text('Again (par 2)')
     expect(bob_page.locator('#mgeShareStatus')).to_contain_text('Made from Warm Ups by Alice')
+    # Alice holed them all before publishing, they count until they're changed
+    expect(bob_page.get_by_role('list', name='Before publishing').get_by_role('listitem')).to_have_count(0)
     assert bob_page.url.endswith('/minigolf/editor')
     # Undo takes back what was in the editor before
     bob_page.get_by_role('button', name='↶ Undo').click()
@@ -260,3 +269,202 @@ def test_a_network_game_on_a_shared_pack(page: Page, seed, alice, bob, new_user_
     rows = seed.query('select user, course, strokes from minigolf_rounds order by user')
     assert [(r['user'], r['course'], json.loads(r['strokes'])) for r in rows] == \
         [(alice.id, 'pack:1', [1]), (bob.id, 'pack:1', [2])]
+
+
+def test_the_packs_that_come_with_the_game_can_be_shared(page: Page, alice):
+    """Whatever the editor can load, the server takes as it is."""
+    login(page, alice)
+    for pack in ('classic', 'brawl'):
+        holes = builtin_holes(page, pack)
+        response = publish(page, pack, holes)
+        assert response.status == 201, response.json()
+        shared = page.request.get(f"/minigolf/api/courses/{response.json()['course']}").json()['holes']
+        assert shared == [{k: v for k, v in h.items() if v != [] and v is not False} for h in holes]
+
+
+def test_most_played_counts_every_version_and_newest_is_the_latest_version(page: Page, seed, alice):
+    login(page, alice)
+    holes = builtin_holes(page)
+    publish(page, 'Old Favourite', holes[:1])
+    publish(page, 'Newcomer', holes[:2])
+    page.request.post('/minigolf/api/rounds', data={'course': 'pack:1', 'strokes': [2]})
+    update(page, 1, 'Old Favourite', holes[:3])  # a fresh Hall of Fame, but still the most played
+    assert [p['name'] for p in packs(page)] == ['Old Favourite', 'Newcomer']
+    assert [p['name'] for p in page.request.get('/minigolf/api/packs?sort=new').json()] == ['Old Favourite', 'Newcomer']
+    # a new name isn't a new pack
+    a_while_ago = (datetime.now() - timedelta(hours=1)).isoformat(timespec='seconds')
+    seed.query('update minigolf_pack_versions set published_at = ? where pack = 1', [a_while_ago])
+    update(page, 1, 'Old Favourite Renamed', holes[:3])
+    assert [p['name'] for p in page.request.get('/minigolf/api/packs?sort=new').json()] == \
+        ['Newcomer', 'Old Favourite Renamed']
+    assert page.request.get('/minigolf/api/packs?sort=nope').status == 400
+
+
+def test_every_player_stores_a_limited_number_of_versions(page: Page, seed, alice):
+    login(page, alice)
+    holes = builtin_holes(page)
+    publish(page, 'Busy', holes[:1])
+    for i in range(2, 51):  # every one different from the one before
+        assert update(page, 1, 'Busy', holes[:2 - i % 2]).status == 200, i
+    response = update(page, 1, 'Busy', holes[:3])
+    assert response.status == 409
+    assert 'versions of your packs stored, 50 at most' in response.json()
+
+    # versions nobody played go a while after they're replaced, then there's room again
+    a_while_ago = (datetime.now() - timedelta(hours=3)).isoformat(timespec='seconds')
+    seed.query('update minigolf_pack_versions set published_at = ?', [a_while_ago])
+    assert update(page, 1, 'Busy', holes[:3]).status == 200
+    assert [r['number'] for r in seed.query('select number from minigolf_pack_versions')] == [50, 51]
+
+
+def test_a_withdrawn_pack_nobody_played_goes_after_a_while(page: Page, seed, alice, bob, new_user_page):
+    login(page, alice)
+    holes = builtin_holes(page)
+    publish(page, 'Gone', holes[:1])
+    publish(page, 'Played', holes[:1])
+    page.request.post('/minigolf/api/rounds', data={'course': 'pack:2', 'strokes': [2]})
+    page.request.delete('/minigolf/api/packs/1')
+    page.request.delete('/minigolf/api/packs/2')
+    # a pack made from it still credits it while it's there
+    bob_page = new_user_page(bob)
+    assert publish(bob_page, 'Remix', holes[:1], based_on=1).json()['based_on']['name'] == 'Gone'
+    assert publish(bob_page, 'Remix of nothing', holes[:1], based_on=99).json()['based_on'] is None
+    assert publish(bob_page, 'Bad credit', holes[:1], based_on='1').status == 400
+
+    a_while_ago = (datetime.now() - timedelta(hours=3)).isoformat(timespec='seconds')
+    seed.query('update minigolf_packs set updated_at = ? where id in (1, 2)', [a_while_ago])
+    publish(page, 'Next', holes[:1])
+    # Bob's packs 3 and 4 and the new 5 stay, so does 2, which has been played
+    assert [r['pack'] for r in seed.query('select pack from minigolf_pack_versions order by pack')] == [2, 3, 4, 5]
+    assert page.request.get('/minigolf/api/packs/1').status == 404
+    assert page.request.get('/minigolf/api/courses/pack:2').status == 200
+
+
+def test_a_lobby_on_a_withdrawn_pack_can_still_be_played(page: Page, seed, alice, bob, new_user_page):
+    login(page, alice)
+    publish(page, 'Lanes', builtin_holes(page)[:1])
+    gid = page.request.post('/minigolf/api/games', data={'course': 'pack:1'}).json()['id']
+    page.request.delete('/minigolf/api/packs/1')
+    bob_page = new_user_page(bob)
+    assert bob_page.request.post(f'/minigolf/api/games/{gid}/join').status == 200
+    assert page.request.post(f'/minigolf/api/games/{gid}/start').status == 200
+
+
+def test_names_are_unique_per_player_whatever_their_case(page: Page, seed, alice, bob, new_user_page):
+    login(page, alice)
+    holes = builtin_holes(page)[:1]
+    publish(page, 'Lanes', holes)
+    publish(page, 'Other', holes)
+    assert publish(page, 'LANES', holes).json() == 'you already share a pack called LANES, publish an update of it instead'
+    assert update(page, 2, 'lanes', holes).status == 409
+    # somebody else's, or a withdrawn one, doesn't count
+    assert publish(new_user_page(bob), 'Lanes', holes).status == 201
+    page.request.delete('/minigolf/api/packs/1')
+    assert publish(page, 'Lanes', holes).status == 201
+
+
+def test_testing_a_shared_pack_keeps_your_work(page: Page, seed, alice):
+    login(page, alice)
+    publish(page, 'Lanes', builtin_holes(page)[:2])
+    page.goto('/minigolf/editor')
+    page.get_by_label('Pack to load').select_option(label='A new pack')
+    page.get_by_role('button', name='Load').click()
+    page.get_by_label('Name', exact=True).first.fill('My Masterpiece')
+    page.get_by_label('Name', exact=True).first.press('Tab')
+    expect(page.locator('#mgeRestore')).to_be_hidden()
+
+    page.goto('/minigolf/editor?pack=1')
+    expect(page.locator('#mgePublishMessage')).to_have_text('Loaded your pack Lanes.')
+    # even after a reload, the work is a click away
+    page.reload()
+    expect(page.get_by_label('Name', exact=True).first).to_have_value('Lanes')
+    page.get_by_role('button', name='↩ Back to My Masterpiece').click()
+    expect(page.get_by_label('Name', exact=True).first).to_have_value('My Masterpiece')
+    # Lanes was loaded as it is, so there's nothing to bring back
+    expect(page.locator('#mgeRestore')).to_be_hidden()
+
+    # loading a pack over it keeps it too
+    page.get_by_label('Pack to load').select_option(label='Classic')
+    page.get_by_role('button', name='Load').click()
+    expect(page.get_by_role('button', name='↩ Back to My Masterpiece')).to_be_visible()
+
+
+def test_publishing_is_remembered_whatever_is_undone(page: Page, seed, alice):
+    login(page, alice)
+    publish(page, 'Lanes', builtin_holes(page)[:1])
+    page.goto('/minigolf/editor?pack=1')
+    expect(page.locator('#mgeShareStatus')).to_have_text('This is your shared pack Lanes, version 1.')
+    hole_name = page.get_by_label('Name', exact=True).nth(1)
+    hole_name.fill('Renamed')
+    hole_name.press('Tab')
+    expect(page.locator('#mgeShareStatus')).to_contain_text("with changes that aren't published yet")
+    page.get_by_role('button', name='↶ Undo').click()
+    page.get_by_role('button', name='↶ Undo').click()  # back to before Lanes was loaded
+    page.get_by_role('button', name='↷ Redo').click()
+    page.get_by_role('button', name='↷ Redo').click()
+    expect(page.locator('#mgeShareStatus')).to_contain_text('This is your shared pack Lanes, version 1')
+
+
+def test_what_the_server_would_refuse_is_pointed_out_before_publishing(page: Page, alice):
+    login(page, alice)
+    page.goto('/minigolf/editor')
+    page.get_by_label('Pack to load').select_option(label='A new pack')
+    page.get_by_role('button', name='Load').click()
+    blockers = page.get_by_role('list', name='Before publishing')
+    hole_name = page.get_by_label('Name', exact=True).nth(1)
+    hole_name.fill('   ')
+    hole_name.press('Tab')
+    expect(blockers).to_contain_text('Hole 1 (   ): it has no name.')
+    hole_name.fill('x' * 40)
+    hole_name.press('Tab')
+    expect(blockers).not_to_contain_text('longer than')
+    # measured like the server does: collapsed whitespace, characters rather than UTF-16 units
+    hint = page.get_by_label('Hint')
+    hint.fill('🏌' * 200)
+    hint.press('Tab')
+    expect(blockers).not_to_contain_text('The hint')
+    hint.fill('🏌' * 201)
+    hint.press('Tab')
+    expect(blockers).to_contain_text('The hint is longer than 200 characters.')
+    hint.fill('a' + ' ' * 300 + 'b')
+    hint.press('Tab')
+    expect(blockers).not_to_contain_text('The hint')
+
+
+def test_a_pack_that_cant_be_loaded_can_be_tried_again(page: Page, seed, alice, bob, new_user_page):
+    login(page, alice)
+    publish(page, 'Lanes', builtin_holes(page)[:1])
+    bob_page = new_user_page(bob)
+    failing = {'on': True}
+
+    def flaky(route):
+        if failing['on']:
+            route.fulfill(status=503, content_type='application/json', body='"down for a moment"')
+        else:
+            route.continue_()
+    bob_page.route('**/minigolf/api/courses/**', flaky)
+    bob_page.goto('/minigolf/')
+    bob_page.get_by_label('Map pack').select_option(label='Lanes by Alice')
+    expect(status(bob_page)).to_have_text("Lanes couldn't be loaded: down for a moment. Click again to try again.")
+    bob_page.get_by_role('button', name='Tee off!').click()
+    expect(status(bob_page)).to_contain_text("couldn't be loaded")
+    failing['on'] = False
+    bob_page.get_by_role('button', name='Tee off!').click()
+    expect(status(bob_page)).to_have_text('Ready.')
+    bob_page.get_by_role('button', name='Tee off!').click()
+    wait_for_turn(bob_page)
+    expect(game(bob_page)).to_have_attribute('data-hole', '1')
+
+
+def test_a_pack_without_a_length_is_refused(page: Page, alice, live_server):
+    """Its size is checked before it's read, so a request has to say how long it is."""
+    import http.client
+    from urllib.parse import urlparse
+    login(page, alice)
+    cookie = '; '.join(f"{c['name']}={c['value']}" for c in page.context.cookies())
+    url = urlparse(live_server)
+    connection = http.client.HTTPConnection(url.hostname, url.port, timeout=10)
+    connection.request('POST', '/minigolf/api/packs', body=iter([b'{"name": "Chunked", "holes": []}']),
+                       headers={'Cookie': cookie, 'Content-Type': 'application/json'}, encode_chunked=True)
+    response = connection.getresponse()
+    assert (response.status, json.loads(response.read())) == (411, 'the request has no Content-Length')

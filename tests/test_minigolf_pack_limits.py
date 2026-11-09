@@ -54,7 +54,8 @@ def test_empty_lists_and_a_house_that_isnt_one_are_left_out():
 
 def test_names_are_one_line_and_not_too_long():
     assert check(hole(name='  Up   the\nhill '))[0]['name'] == 'Up the hill'
-    refused('hole 1: has no name', hole(name='   '))
+    refused('hole 1: its name is missing', hole(name='   '))
+    refused('hole 1: its name must be text', hole(name=None))
     refused('longer than 40', hole(name='x' * 41))
     assert clean_text(' My  pack ', 'the name', 40) == 'My pack'
     assert clean_text(None, 'the hint', 200, required=False) == ''

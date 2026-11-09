@@ -3,6 +3,7 @@
 -- keep the holes they were played on. Rounds and games refer to a version as their course, 'pack:<version id>',
 -- every version has a Hall of Fame of its own.
 -- A withdrawn pack isn't offered anymore, but its versions stay for the games and rounds played on them.
+-- Versions nobody played are deleted by the app a while after they're replaced or withdrawn.
 create table minigolf_packs
 (
   id         integer primary key autoincrement,
@@ -19,6 +20,9 @@ create table minigolf_packs
 );
 create index minigolf_packs_author_index
   on minigolf_packs (author);
+-- a player's packs on offer have names of their own, an update is the way to change one
+create unique index minigolf_packs_listed_name_unique
+  on minigolf_packs (author, name collate nocase) where status = 'listed';
 
 -- The holes are validated and rebuilt by the app (minigolf_packs.validate_holes), the only writer.
 create table minigolf_pack_versions

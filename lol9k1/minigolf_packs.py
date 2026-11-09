@@ -63,7 +63,8 @@ def validate_holes(holes, width: int, height: int, max_strokes: int) -> list[dic
     return clean
 
 
-def _is_number(value) -> bool:
+def is_number(value) -> bool:
+    """A finite int or float, not a bool."""
     return type(value) in (int, float) and math.isfinite(value)
 
 
@@ -93,7 +94,7 @@ class _Hole:
         raise PackError(f'hole {self.number}: {message}')
 
     def number_in(self, value, what: str, low: float, high: float) -> float:
-        if not _is_number(value) or not low <= value <= high:
+        if not is_number(value) or not low <= value <= high:
             self.fail(f'{what} must be a number from {low:g} to {high:g}')
         return value
 
@@ -178,12 +179,10 @@ class _Hole:
     def clean(self, hole) -> dict:
         if not isinstance(hole, dict):
             self.fail('must be an object')
-        name = hole.get('name')
-        if not isinstance(name, str) or not ' '.join(name.split()):
-            self.fail('has no name')
-        name = ' '.join(name.split())
-        if len(name) > MAX_NAME:
-            self.fail(f'its name is longer than {MAX_NAME} characters')
+        try:
+            name = clean_text(hole.get('name'), 'its name', MAX_NAME)
+        except PackError as e:
+            self.fail(str(e))
         par = hole.get('par')
         if type(par) is not int or not 1 <= par <= self.max_strokes:
             self.fail(f'par must be a whole number from 1 to {self.max_strokes}')

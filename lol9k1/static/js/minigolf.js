@@ -48,6 +48,16 @@ window.lol9k1MinigolfRules = (function () {
 })();
 
 /*
+ * The colours of the things on a course, shared with the pictures of holes on /minigolf/packs
+ * (static/js/minigolf_packs.js), so a hole looks the same there.
+ */
+window.lol9k1MinigolfLook = Object.freeze({
+    rough: '#1b4d1e', fairway: '#4caf50', sand: '#e6d28a', water: '#1e88e5', boost: 'rgba(255,235,59,0.25)',
+    tee: 'rgba(255,255,255,0.25)', cup: '#111', wall: '#6d4c41', block: '#8d6e63', house: '#c62828',
+    bumper: '#e53935', slider: '#ff9800',
+});
+
+/*
  * The map packs, by id: their holes and a hint shown when the pack is picked. Plain data,
  * so it can be checked without playing it (tests/e2e/test_minigolf_packs.py), and edited and
  * exported back as code by the map editor (/minigolf/editor, static/js/minigolf_editor.js).
@@ -243,6 +253,7 @@ window.lol9k1MinigolfPacks = (function () {
         return;
     }
     const rules = window.lol9k1MinigolfRules;
+    const LOOK = window.lol9k1MinigolfLook;
     // On the map editor's page (static/js/minigolf_editor.js) the game shows the hole being edited
     // and test plays it, see window.lol9k1Minigolf below.
     const editorMode = root.dataset.mode === 'editor';
@@ -285,6 +296,7 @@ window.lol9k1MinigolfPacks = (function () {
     // or a game on one is joined. A version's holes never change, so they're loaded once.
     const SHARED = {};      // by id: {holes, hint}
     const loading = {};     // by id: the promise of its holes
+    const loadFailed = {};  // by id: why its holes couldn't be loaded the last time
     let course = null;      // the map pack being played, an id of PACKS or SHARED
     let HOLES = null;       // its holes, null while a shared pack is loading
 
@@ -300,10 +312,14 @@ window.lol9k1MinigolfPacks = (function () {
         }
         if (!loading[id]) {
             loading[id] = api('GET', root.dataset.courseUrl.replace(/-$/, encodeURIComponent(id))).then(data => {
+                delete loadFailed[id];
                 SHARED[id] = {holes: data.holes, hint: data.hint ? `${data.hint} (by ${data.author})` : `By ${data.author}.`};
                 SERVER_COURSES[id] = Object.assign({}, SERVER_COURSES[id],
                     {name: data.name, holes: data.holes.length, author: data.author, shared: true});
                 return SHARED[id];
+            }, error => {
+                loadFailed[id] = error.message === 'logged out' ? 'you were logged out' : error.message;
+                throw error;
             }).finally(() => {
                 delete loading[id];
             });
@@ -316,7 +332,8 @@ window.lol9k1MinigolfPacks = (function () {
         const known = SERVER_COURSES[id];
         const pack = packOf(id);
         if (!pack && known && known.shared) {
-            return `Loading ${known.name}...`;
+            return loadFailed[id] ? `${known.name} couldn't be loaded: ${loadFailed[id]}. Click again to try again.`
+                : `Loading ${known.name}...`;
         }
         if (!pack || !known) {
             return `This page doesn't know the map pack "${id}". Reload it, maybe?`;
@@ -329,6 +346,18 @@ window.lol9k1MinigolfPacks = (function () {
 
     function courseName(id, fallback) {
         return SERVER_COURSES[id] ? SERVER_COURSES[id].name : (fallback || id);
+    }
+
+    // Whether the picked pack can't be played (yet), it says why. A shared pack that couldn't be loaded
+    // is loaded again.
+    function cantPlay() {
+        const mismatch = courseMismatch(course);
+        if (mismatch && loadFailed[course] && !packOf(course)) {
+            pickPack(course);
+        } else if (mismatch) {
+            setStatus(mismatch);
+        }
+        return !!mismatch;
     }
 
     // an unknown pack falls back to the classic one, the course and its holes always go together
@@ -898,7 +927,7 @@ window.lol9k1MinigolfPacks = (function () {
     }
 
     function drawBackground() {
-        ctx.fillStyle = '#1b4d1e';
+        ctx.fillStyle = LOOK.rough;
         ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = 'rgba(255,255,255,0.03)';
         for (let x = 0; x < W; x += 40) {
@@ -911,7 +940,7 @@ window.lol9k1MinigolfPacks = (function () {
         polyPath(hole.outline);
         ctx.save();
         ctx.clip();
-        ctx.fillStyle = '#4caf50';
+        ctx.fillStyle = LOOK.fairway;
         ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = '#43a047';
         for (let x = -H; x < W; x += 32) {
@@ -923,7 +952,7 @@ window.lol9k1MinigolfPacks = (function () {
             ctx.fill();
         }
         hole.sand.forEach(r => {
-            ctx.fillStyle = '#e6d28a';
+            ctx.fillStyle = LOOK.sand;
             roundRect(r[0], r[1], r[2], r[3], 10);
             ctx.fill();
             ctx.fillStyle = '#cdb76a';
@@ -933,7 +962,7 @@ window.lol9k1MinigolfPacks = (function () {
             }
         });
         hole.water.forEach(r => {
-            ctx.fillStyle = '#1e88e5';
+            ctx.fillStyle = LOOK.water;
             ctx.fillRect(r[0], r[1], r[2], r[3]);
             ctx.strokeStyle = 'rgba(255,255,255,0.45)';
             ctx.lineWidth = 2;
@@ -951,7 +980,7 @@ window.lol9k1MinigolfPacks = (function () {
             }
         });
         hole.boosts.forEach(r => {
-            ctx.fillStyle = 'rgba(255,235,59,0.25)';
+            ctx.fillStyle = LOOK.boost;
             ctx.fillRect(r[0], r[1], r[2], r[3]);
             const cx = r[0] + r[2] / 2, cy = r[1] + r[3] / 2;
             const angle = Math.atan2(r[5], r[4]);
@@ -982,7 +1011,7 @@ window.lol9k1MinigolfPacks = (function () {
             if (!seats.length) {
                 return;
             }
-            ctx.fillStyle = 'rgba(255,255,255,0.25)';
+            ctx.fillStyle = LOOK.tee;
             ctx.fillRect(tee[0] - 14, tee[1] - 14, 28, 28);
             if (own) {
                 ctx.lineWidth = 2;
@@ -994,7 +1023,7 @@ window.lol9k1MinigolfPacks = (function () {
         });
 
         // cup
-        ctx.fillStyle = '#111';
+        ctx.fillStyle = LOOK.cup;
         ctx.beginPath();
         ctx.arc(hole.cup[0], hole.cup[1], CUP_R, 0, Math.PI * 2);
         ctx.fill();
@@ -1005,7 +1034,7 @@ window.lol9k1MinigolfPacks = (function () {
         // walls
         ctx.lineJoin = 'round';
         polyPath(hole.outline);
-        ctx.strokeStyle = '#6d4c41';
+        ctx.strokeStyle = LOOK.wall;
         ctx.lineWidth = 8;
         ctx.stroke();
         ctx.strokeStyle = '#a1887f';
@@ -1013,9 +1042,9 @@ window.lol9k1MinigolfPacks = (function () {
         ctx.stroke();
         hole.blocks.forEach(b => {
             polyPath(b);
-            ctx.fillStyle = hole.house ? '#c62828' : '#8d6e63';
+            ctx.fillStyle = hole.house ? LOOK.house : LOOK.block;
             ctx.fill();
-            ctx.strokeStyle = '#6d4c41';
+            ctx.strokeStyle = LOOK.wall;
             ctx.lineWidth = 8;
             ctx.stroke();
             ctx.strokeStyle = '#bcaaa4';
@@ -1035,7 +1064,7 @@ window.lol9k1MinigolfPacks = (function () {
             ctx.beginPath();
             ctx.arc(bp[0] + 3, bp[1] + 3, bp[2], 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = lit ? '#fff59d' : '#e53935';
+            ctx.fillStyle = lit ? '#fff59d' : LOOK.bumper;
             ctx.beginPath();
             ctx.arc(bp[0], bp[1], bp[2], 0, Math.PI * 2);
             ctx.fill();
@@ -1053,7 +1082,7 @@ window.lol9k1MinigolfPacks = (function () {
         hole.sliders.forEach(s => {
             const o = sliderOffset(s, time);
             const x = s.x + o.x, y = s.y + o.y;
-            ctx.fillStyle = '#ff9800';
+            ctx.fillStyle = LOOK.slider;
             ctx.fillRect(x, y, s.w, s.h);
             ctx.fillStyle = '#212121';
             for (let i = 0; i < s.h; i += 14) {
@@ -1419,9 +1448,7 @@ window.lol9k1MinigolfPacks = (function () {
     });
 
     document.getElementById('minigolfStart').addEventListener('click', function () {
-        const mismatch = courseMismatch(course);
-        if (mismatch) {
-            setStatus(mismatch);
+        if (cantPlay()) {
             return;
         }
         const names = Array.from(playerList.querySelectorAll('input')).map((input, i) =>
@@ -1570,7 +1597,9 @@ window.lol9k1MinigolfPacks = (function () {
             console.error('Saving the minigolf round failed:', error);
             saved.textContent = error.message === 'logged out'
                 ? 'You were logged out, so your round could not be saved. Log in again to keep playing.'
-                : 'Could not save your round, sorry!';
+                : (SERVER_COURSES[course] && SERVER_COURSES[course].shared && error.message === 'HTTP 400'
+                    ? 'Could not save your round: this version of the pack is gone. Reload the page for the latest.'
+                    : 'Could not save your round, sorry!');
         });
     }
 
@@ -1721,9 +1750,7 @@ window.lol9k1MinigolfPacks = (function () {
     }
 
     document.getElementById('minigolfHost').addEventListener('click', function () {
-        const mismatch = courseMismatch(course);
-        if (mismatch) {
-            setStatus(mismatch);
+        if (cantPlay()) {
             return;
         }
         api('POST', gamesUrl, {course}).then(enterNet).catch(error => failed('Hosting a game', error));
@@ -2025,9 +2052,9 @@ window.lol9k1MinigolfPacks = (function () {
                 if (course === id && !HOLES && !net && state === 'setup') {
                     pickPack(id);
                 }
-            }).catch(error => {
-                if (course === id) {
-                    failed(`Loading ${courseName(id)}`, error);
+            }).catch(() => {
+                if (course === id && !HOLES) {
+                    setStatus(courseMismatch(id));
                 }
             });
             return;

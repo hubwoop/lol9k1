@@ -37,18 +37,23 @@ Hit *Publish* in the editor and everybody at the party can play your pack. It's 
 under *Shared by players*, for hot seat and network games, with a Hall of Fame of its own.
 *Map packs* (`/minigolf/packs`) lists them all, most played or newest first, with a picture of every hole:
 *Play* one, or *Test* it in the editor, where a click on a hole opens it to putt. There it can be changed
-and published as a pack of your own, which says what it was made from.
+and published as a pack of your own, which says what it was made from. Whatever you were working on in the
+editor is kept: *↩ Back to ...* brings it back.
 
 - Every hole has to be holed in a test run before the pack can be published, so nobody shares a hole
-  that can't be played. (Like rounds, that's taken on trust.)
-- Publishing it again is an update: a new version with a fresh Hall of Fame, as the holes aren't the same
-  anymore. Rounds and running games keep the version they're played on. Versions nobody played are thrown
-  away a while after they're replaced.
-- *Withdraw* takes a pack off offer, for its author and the admins. Games on it can still be finished.
-- Limits, to keep packs playable on any laptop and the database small: every player shares up to 10 packs,
-  a pack has up to 18 holes and 64 KB, a hole up to 8 tees, 40 blocks, 30 each of sand, water, boosts and
-  bumpers, 12 sliders, 4 windmills and 200 wall corners. Tees and cup are on the fairway. The server
-  checks it all and keeps nothing it doesn't know (see `lol9k1/minigolf_packs.py`).
+  that can't be played. (Like rounds, that's taken on trust.) The editor also points out anything the
+  server would refuse before you publish.
+- Publishing it again is an update, by its author only: a new version with a fresh Hall of Fame, as the
+  holes aren't the same anymore. Rounds and running games keep the version they're played on, and rounds
+  on earlier versions still count for *most played*.
+- *Withdraw* takes a pack off offer, for its author and the admins. Games on it, open lobbies included,
+  can still be played.
+- Versions nobody played are thrown away 2 hours after they're replaced or withdrawn.
+- Limits, to keep packs playable on any laptop and the database small: every player shares up to 10 packs
+  with names of their own and keeps up to 50 versions, a pack has up to 18 holes and 64 KB, a hole up to
+  8 tees, 40 blocks, 30 each of sand, water, boosts and bumpers, 12 sliders, 4 windmills and 200 wall
+  corners. Tees and cup are on the fairway. The server checks it all and keeps nothing it doesn't know
+  (see `lol9k1/minigolf_packs.py`).
 
 ## Recommended Setup
 ### On macOS and Linux 

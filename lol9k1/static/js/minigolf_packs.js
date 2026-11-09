@@ -12,6 +12,7 @@
     }
     const W = parseInt(root.dataset.width, 10), H = parseInt(root.dataset.height, 10);
     const SCALE = 0.3;
+    const LOOK = window.lol9k1MinigolfLook;  // static/js/minigolf.js
 
     function polygon(ctx, poly) {
         ctx.beginPath();
@@ -19,48 +20,44 @@
         ctx.closePath();
     }
 
-    // the hole as it lies before anybody putts, in the game's colours (see drawHole in minigolf.js)
+    // The hole as it lies before anybody putts, simplified to read at this size, in the game's colours.
+    // Tees are white dots here, the game's tee boxes are too faint to see this small.
     function drawHole(canvas, h) {
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         canvas.width = W * SCALE * dpr;
         canvas.height = H * SCALE * dpr;
         const ctx = canvas.getContext('2d');
         ctx.scale(SCALE * dpr, SCALE * dpr);
-        ctx.fillStyle = '#2e7d32';
+        ctx.fillStyle = LOOK.rough;
         ctx.fillRect(0, 0, W, H);
         polygon(ctx, h.outline);
-        ctx.fillStyle = '#4caf50';
+        ctx.fillStyle = LOOK.fairway;
         ctx.fill();
+        const rects = (list, colour) => (list || []).forEach(r => {
+            ctx.fillStyle = colour;
+            ctx.fillRect(r[0], r[1], r[2], r[3]);
+        });
+        rects(h.sand, LOOK.sand);
+        rects(h.water, LOOK.water);
+        rects(h.boosts, LOOK.boost);
+        ctx.lineJoin = 'round';
+        polygon(ctx, h.outline);
         ctx.lineWidth = 8;
-        ctx.strokeStyle = '#8d6e63';
+        ctx.strokeStyle = LOOK.wall;
         ctx.stroke();
-        (h.sand || []).forEach(r => {
-            ctx.fillStyle = '#e6d28a';
-            ctx.fillRect(r[0], r[1], r[2], r[3]);
-        });
-        (h.water || []).forEach(r => {
-            ctx.fillStyle = '#1e88e5';
-            ctx.fillRect(r[0], r[1], r[2], r[3]);
-        });
-        (h.boosts || []).forEach(b => {
-            ctx.fillStyle = 'rgba(255,235,59,0.5)';
-            ctx.fillRect(b[0], b[1], b[2], b[3]);
-        });
         (h.blocks || []).forEach(b => {
             polygon(ctx, b);
-            ctx.fillStyle = h.house ? '#c62828' : '#8d6e63';
+            ctx.fillStyle = h.house ? LOOK.house : LOOK.block;
             ctx.fill();
         });
-        (h.sliders || []).forEach(s => {
-            ctx.fillStyle = '#6d4c41';
-            ctx.fillRect(s.x, s.y, s.w, s.h);
-        });
-        (h.bumpers || []).forEach(b => {
+        rects((h.sliders || []).map(s => [s.x, s.y, s.w, s.h]), LOOK.slider);
+        const dot = (x, y, r, colour) => {
             ctx.beginPath();
-            ctx.arc(b[0], b[1], b[2], 0, Math.PI * 2);
-            ctx.fillStyle = '#e91e63';
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = colour;
             ctx.fill();
-        });
+        };
+        (h.bumpers || []).forEach(b => dot(b[0], b[1], b[2], LOOK.bumper));
         (h.rotors || []).forEach(r => {
             ctx.strokeStyle = 'rgba(255,255,255,0.8)';
             ctx.lineWidth = 6;
@@ -72,16 +69,8 @@
                 ctx.stroke();
             }
         });
-        (h.starts || [h.start]).forEach(t => {
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(t[0], t[1], 9, 0, Math.PI * 2);
-            ctx.fill();
-        });
-        ctx.fillStyle = '#111';
-        ctx.beginPath();
-        ctx.arc(h.cup[0], h.cup[1], 12, 0, Math.PI * 2);
-        ctx.fill();
+        (h.starts || [h.start]).forEach(t => dot(t[0], t[1], 9, '#fff'));
+        dot(h.cup[0], h.cup[1], 12, LOOK.cup);
     }
 
     function showHoles(item) {
