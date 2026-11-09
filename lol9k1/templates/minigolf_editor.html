@@ -65,11 +65,19 @@
                   {% for p in shared %}<option value="shared:{{ p.id }}">{{ p.name }} by {{ p.author }}</option>{% endfor %}
                 </optgroup>
               {% endif %}
+              <option value="work" id="mgeWorkOption" hidden>Your work</option>
             </select>
             <button type="button" class="minigolfButton" id="mgeLoad">Load</button>
+          </p>
+          <div class="mgeRow">
             <button type="button" class="minigolfButton" id="mgeRestore" hidden
                     title="What you were working on before you loaded a pack">↩ Restore</button>
-          </p>
+            <details id="mgeBackups" class="mgeBackups" hidden>
+              <summary>Older work</summary>
+              <ul id="mgeBackupList" class="mgeBackupList" aria-label="Older work"></ul>
+            </details>
+          </div>
+          <p id="mgeNotice" class="mgeNotice" role="status"></p>
           <p class="mgeRow"><label for="mgePackId">Id</label> <input id="mgePackId" type="text" maxlength="32"></p>
           <p class="mgeRow"><label for="mgePackName">Name</label> <input id="mgePackName" type="text" maxlength="40"></p>
           <p class="mgeRow"><label for="mgePackHint">Hint</label> <input id="mgePackHint" type="text"></p>
@@ -106,9 +114,11 @@
       <ul id="mgeShareBlockers" class="mgeChecks" aria-label="Before publishing"></ul>
       <p class="mgeRow">
         <button type="button" class="minigolfButton minigolfButtonBig" id="mgePublish">Publish</button>
-        <button type="button" class="minigolfButton" id="mgePublishNew" hidden>Publish as a new pack</button>
-        <span id="mgePublishMessage" class="minigolfHint" role="status"></span>
+        <button type="button" class="minigolfButton" id="mgePublishNew" hidden
+                aria-describedby="mgePublishNewHelp">Publish as a new pack</button>
+        <span id="mgePublishNewHelp" class="minigolfHint" hidden></span>
       </p>
+      <p id="mgePublishMessage" class="minigolfHint" role="status"></p>
       <p class="minigolfHint">
         Everybody can play the packs you publish, and test and change them in their own editor:
         <a href="{{ url_for('minigolf.packs_page') }}">🗺 browse the shared packs</a>.

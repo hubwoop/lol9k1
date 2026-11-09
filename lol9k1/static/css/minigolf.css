@@ -444,6 +444,32 @@
     margin: 0;
 }
 
+/* what was loaded or brought back, next to the picker so it's seen */
+.mgeNotice {
+    color: #1b5e20;
+    font-weight: bold;
+    margin: 3px 0;
+}
+
+.mgeNotice:empty {
+    display: none;
+}
+
+.mgeBackups summary {
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.mgeBackupList {
+    list-style: none;
+    margin: 2px 0;
+    padding: 0;
+}
+
+.mgeBackupList li {
+    margin: 2px 0;
+}
+
 /* ---------------------------------------------------------------- the browser of shared packs */
 .mgpFilters a[aria-current="true"] {
     font-weight: bold;

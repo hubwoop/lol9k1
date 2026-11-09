@@ -184,7 +184,8 @@ def test_build_a_pack_test_every_hole_and_publish_it(page: Page, seed, alice):
     page.get_by_label('Name', exact=True).first.press('Tab')
 
     blockers = page.get_by_role('list', name='Before publishing')
-    expect(blockers).to_have_text("Hole 1 (New hole) hasn't been holed in a test run yet.")
+    expect(blockers).to_have_text(
+        "Hole 1 (New hole) has to be holed in a test run as it is now: press ▶ Test (T) and putt it into the cup.")
     expect(page.get_by_role('button', name='Publish', exact=True)).to_be_disabled()
 
     # the new hole is a straight lane, the cup is 420px to the right of the tee
@@ -202,11 +203,29 @@ def test_build_a_pack_test_every_hole_and_publish_it(page: Page, seed, alice):
     assert row['name'] == 'My First Pack'
     assert [h['name'] for h in json.loads(row['holes'])] == ['New hole']
 
-    # it's an update from now on, and a changed hole has to be holed again
-    expect(page.get_by_role('button', name='Publish update (version 2)')).to_be_enabled()
+    # it's an update from now on, and there's nothing to update until something changes
+    publish_button = page.locator('#mgePublish')
+    expect(publish_button).to_have_text('Up to date')
+    expect(publish_button).to_be_disabled()
+    page.reload()
+    expect(publish_button).to_have_text('Up to date')
+    expect(publish_button).to_be_disabled()
+    # the same holes under another name are the same version
+    page.get_by_label('Hint').fill('Easy does it')
+    page.get_by_label('Hint').press('Tab')
+    expect(publish_button).to_have_text('Save name and hint')
+    publish_button.click()
+    expect(page.locator('#mgePublishMessage')).to_contain_text(
+        "Saved the name and hint of My First Pack, it's still version 1.")
+    expect(publish_button).to_have_text('Up to date')
+
+    # and a changed hole has to be holed again
     page.get_by_label('Par', exact=True).fill('4')
     page.get_by_label('Par', exact=True).press('Tab')
-    expect(blockers).to_have_text("Hole 1 (New hole) hasn't been holed in a test run yet.")
+    expect(blockers).to_have_text(
+        "Hole 1 (New hole) has to be holed in a test run as it is now: press ▶ Test (T) and putt it into the cup.")
+    expect(page.locator('#mgePublishMessage')).to_be_empty()  # what was said about it is old news
+    expect(publish_button).to_have_text('Publish update (version 2)')
     expect(page.get_by_role('button', name='Publish as a new pack')).to_be_visible()
 
 
@@ -226,12 +245,22 @@ def test_browse_test_and_play_somebody_elses_pack(page: Page, seed, alice, bob, 
 
     # test a hole in the editor, it's a pack of Bob's own from there on
     pack.get_by_role('link', name='Test hole 2, Again, par 2').click()
-    expect(bob_page.locator('#mgePublishMessage')).to_have_text(
-        'Loaded Warm Ups by Alice. Test it, change it, publish it as a pack of your own.')
+    notice = bob_page.locator('#mgeNotice')
+    expect(notice).to_have_text(
+        'Loaded Warm Ups by Alice. Press ▶ Test (T) to putt hole 2, change it, publish it as a pack of your own.')
+    expect(notice).to_be_in_viewport()
+    expect(bob_page.get_by_label('Pack to load')).to_have_value('shared:1')
     expect(bob_page.locator('#mgeHoles button[aria-current="true"]')).to_have_text('Again (par 2)')
     expect(bob_page.locator('#mgeShareStatus')).to_contain_text('Made from Warm Ups by Alice')
-    # Alice holed them all before publishing, they count until they're changed
-    expect(bob_page.get_by_role('list', name='Before publishing').get_by_role('listitem')).to_have_count(0)
+    # Alice holed them all before publishing, they count until they're changed, but the very same pack is hers
+    blockers = bob_page.get_by_role('list', name='Before publishing')
+    expect(blockers).to_have_text("Change something first, it's still Warm Ups by Alice.")
+    expect(bob_page.get_by_role('button', name='Publish', exact=True)).to_be_disabled()
+    bob_page.get_by_label('Hint').fill('My way')
+    bob_page.get_by_label('Hint').press('Tab')
+    expect(blockers.get_by_role('listitem')).to_have_count(0)
+    expect(bob_page.get_by_role('button', name='Publish', exact=True)).to_be_enabled()
+    bob_page.get_by_role('button', name='↶ Undo').click()
     assert bob_page.url.endswith('/minigolf/editor')
     # Undo takes back what was in the editor before
     bob_page.get_by_role('button', name='↶ Undo').click()
@@ -389,7 +418,7 @@ def test_testing_a_shared_pack_keeps_your_work(page: Page, seed, alice):
     expect(page.locator('#mgeRestore')).to_be_hidden()
 
     page.goto('/minigolf/editor?pack=1')
-    expect(page.locator('#mgePublishMessage')).to_have_text('Loaded your pack Lanes.')
+    expect(page.locator('#mgeNotice')).to_have_text('Loaded your pack Lanes. Press ▶ Test (T) to putt hole 1.')
     # even after a reload, the work is a click away
     page.reload()
     expect(page.get_by_label('Name', exact=True).first).to_have_value('Lanes')
@@ -544,6 +573,21 @@ def test_the_editor_knows_every_limit(page: Page, alice):
     page.goto('/minigolf/editor')
     limits = json.loads(page.locator('#minigolfEditor').get_attribute('data-limits'))
     assert (limits['bumper'], limits['speed'], limits['blades']) == (80, 10, 8)
+    # and checks them, and how far off the canvas things may be, before the server does
+    problems = page.evaluate("""() => {
+        const T = lol9k1MinigolfEditorTools;
+        const h = T.normalize(lol9k1MinigolfPacks.classic.holes[0]);
+        h.bumpers = [[100, 100, 30]];
+        const limits = JSON.parse(document.getElementById('minigolfEditor').dataset.limits);
+        const ok = T.shareProblems(h, limits, 640, 400);
+        h.sand = [[-700, 100, 20, 20]];
+        const far = T.shareProblems(h, limits, 640, 400);
+        h.sand = [];
+        const tight = T.shareProblems(h, Object.assign({}, limits, {bumper: 20}), 640, 400);
+        return [ok, far, tight];
+    }""")
+    assert problems == [[], ['something is too far off the canvas'],
+                        ['a bumper is too small or too big, its radius goes from 1 to 20']]
 
 
 def test_withdrawing_on_the_browse_page_says_what_happened(page: Page, seed, alice):
@@ -609,3 +653,101 @@ def test_when_a_pack_was_published_reads_easily(page: Page, seed, alice):
     expect(when).to_have_text(f'today {published[11:16]}')
     expect(when).to_have_attribute('title', published.replace('T', ' '))
     expect(when).to_have_attribute('datetime', published)
+
+
+def test_earlier_work_is_kept_whatever_is_loaded_over_it(page: Page, seed, alice, bob, new_user_page):
+    login(page, alice)
+    publish(page, 'Lanes', builtin_holes(page)[:2])
+    bob_page = new_user_page(bob)
+    bob_page.goto('/minigolf/editor')
+    bob_page.get_by_label('Pack to load').select_option(label='A new pack')
+    bob_page.get_by_role('button', name='Load').click()
+    pack_name = bob_page.get_by_label('Name', exact=True).first
+    pack_name.fill('Bob WIP')
+    pack_name.press('Tab')
+
+    # Alice's pack, changed, and then another pack over that: both are kept
+    bob_page.goto('/minigolf/editor?pack=1')
+    expect(bob_page.get_by_role('button', name='↩ Back to Bob WIP')).to_be_visible()
+    par = bob_page.get_by_label('Par', exact=True)
+    par.fill('5')
+    par.press('Tab')
+    bob_page.get_by_label('Pack to load').select_option(label='Classic')
+    bob_page.get_by_role('button', name='Load').click()
+    bob_page.reload()
+    expect(bob_page.get_by_role('button', name='↩ Back to Lanes')).to_be_visible()
+    bob_page.locator('#mgeBackups summary').click()
+    bob_page.get_by_role('list', name='Older work').get_by_role('button', name='↩ Bob WIP (1 hole)').click()
+    expect(pack_name).to_have_value('Bob WIP')
+    expect(bob_page.locator('#mgeNotice')).to_have_text('Back to Bob WIP.')
+    # Classic was loaded as it is, Lanes with its changes is still there
+    expect(bob_page.get_by_role('button', name='↩ Back to Lanes')).to_be_visible()
+    expect(bob_page.locator('#mgeBackups')).to_be_hidden()
+    bob_page.get_by_role('button', name='↩ Back to Lanes').click()
+    expect(bob_page.get_by_role('list', name='Holes').get_by_role('button').first).to_have_text('Warm-up (par 5)')
+    # and it's a swap
+    expect(bob_page.get_by_role('button', name='↩ Back to Bob WIP')).to_be_visible()
+
+
+def test_the_one_workspace_kept_before_is_kept_still(page: Page, alice):
+    login(page, alice)
+    page.goto('/minigolf/editor')
+    page.evaluate("""() => {
+        const saved = {pack: {id: 'old', name: 'Old Work', hint: '', ws: 'w1',
+                              holes: [lol9k1MinigolfPacks.classic.holes[0]]}, current: 0};
+        localStorage.setItem('minigolfEditorBackup', JSON.stringify(saved));
+    }""")
+    page.reload()
+    page.get_by_role('button', name='↩ Back to Old Work').click()
+    expect(page.get_by_label('Name', exact=True).first).to_have_value('Old Work')
+    assert page.evaluate("localStorage.getItem('minigolfEditorBackup')") is None
+
+
+def test_a_pack_that_comes_with_the_game_needs_changing_to_be_published(page: Page, alice):
+    login(page, alice)
+    page.goto('/minigolf/editor')
+    picker = page.get_by_label('Pack to load')
+    expect(picker).to_have_value('classic')
+    expect(page.locator('#mgeShareStatus')).to_have_text(
+        'Classic comes with the game. Change something or build your own pack to publish it.')
+    expect(page.get_by_role('list', name='Before publishing').get_by_role('listitem')).to_have_count(0)
+    expect(page.get_by_role('button', name='Publish', exact=True)).to_be_disabled()
+
+    par = page.get_by_label('Par', exact=True)
+    par.fill('5')
+    par.press('Tab')
+    expect(page.get_by_role('list', name='Before publishing')).to_contain_text(
+        'Hole 1 (Warm-up) has to be holed in a test run as it is now: press ▶ Test (T) and putt it into the cup.')
+    expect(page.get_by_role('list', name='Before publishing')).to_contain_text(
+        'Hole 2 (Dogleg) has to be holed in a test run as it is now: select it, press ▶ Test (T)')
+    # it's not Classic anymore, after a reload too
+    page.reload()
+    expect(picker).to_have_value('work')
+    expect(picker.locator('option:checked')).to_have_text('Your work: Classic')
+
+
+def test_a_copy_of_your_own_pack_is_a_new_pack_under_a_new_name(page: Page, seed, alice):
+    login(page, alice)
+    publish(page, 'Lanes', builtin_holes(page)[:1])
+    page.goto('/minigolf/editor?pack=1')
+    picker = page.get_by_label('Pack to load')
+    expect(picker).to_have_value('shared:1')
+    page.reload()
+    expect(picker).to_have_value('shared:1')
+
+    as_new = page.get_by_role('button', name='Publish as a new pack')
+    help_text = page.locator('#mgePublishNewHelp')
+    expect(help_text).to_have_text('To share a copy as a new pack, give it a name other than Lanes first.')
+    expect(as_new).to_be_disabled()
+    pack_name = page.get_by_label('Name', exact=True).first
+    pack_name.fill('lanes ')
+    pack_name.press('Tab')
+    expect(as_new).to_be_disabled()
+    pack_name.fill('More Lanes')
+    pack_name.press('Tab')
+    expect(help_text).to_have_text('Keeps Lanes as it is and shares a copy under a new name.')
+    as_new.click()
+    expect(page.locator('#mgePublishMessage')).to_contain_text('Published More Lanes, version 1.')
+    rows = seed.query('select name, based_on from minigolf_packs order by id')
+    assert [(r['name'], r['based_on']) for r in rows] == [('Lanes', None), ('More Lanes', None)]
+    expect(page.locator('#mgePublish')).to_have_text('Up to date')

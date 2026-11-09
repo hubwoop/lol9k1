@@ -600,14 +600,23 @@ window.lol9k1MinigolfEditorTools = (function () {
         if (corners > limits.wall_corners) {
             out.push(`its walls have ${corners} corners, ${limits.wall_corners} at most`);
         }
-        if (h.bumpers.some(b => !(b[2] >= 1 && b[2] <= 80))) {
-            out.push('a bumper is too small or too big');
+        // things may stick out of the canvas a bit, but not by more than its size
+        const xs = [...h.outline, ...h.blocks.flat(), ...h.sand, ...h.water, ...h.boosts, ...h.bumpers].map(p => p[0])
+            .concat(h.sliders.map(s => s.x), h.rotors.flatMap(r => [r.cx, ...r.door]));
+        const ys = [...h.outline, ...h.blocks.flat(), ...h.sand, ...h.water, ...h.boosts, ...h.bumpers].map(p => p[1])
+            .concat(h.sliders.map(s => s.y), h.rotors.map(r => r.cy));
+        if (xs.some(x => !(x >= -w && x <= 2 * w)) || ys.some(y => !(y >= -hh && y <= 2 * hh))) {
+            out.push('something is too far off the canvas');
         }
-        if ([...h.rotors, ...h.sliders].some(m => !(Math.abs(m.speed) <= 10))) {
-            out.push('something turns or slides faster than 10');
+        const bumper = limits.bumper || 80, speed = limits.speed || 10, blades = limits.blades || 8;
+        if (h.bumpers.some(b => !(b[2] >= 1 && b[2] <= bumper))) {
+            out.push(`a bumper is too small or too big, its radius goes from 1 to ${bumper}`);
         }
-        if (h.rotors.some(r => !Number.isInteger(r.blades) || r.blades < 1 || r.blades > 8 || r.door[0] > r.door[1])) {
-            out.push('a windmill needs 1 to 8 blades and a door from left to right');
+        if ([...h.rotors, ...h.sliders].some(m => !(Math.abs(m.speed) <= speed))) {
+            out.push(`something turns or slides faster than ${speed}`);
+        }
+        if (h.rotors.some(r => !Number.isInteger(r.blades) || r.blades < 1 || r.blades > blades || r.door[0] > r.door[1])) {
+            out.push(`a windmill needs 1 to ${blades} blades and a door from left to right`);
         }
         return out;
     }
@@ -653,10 +662,10 @@ window.lol9k1MinigolfEditorTools = (function () {
     overlay.height = H * dpr;
 
     // ---------------------------------------------------------------- the workspace
-    // {id, name, hint, holes: [normalized holes], ws, origin, base}:
+    // {id, name, hint, holes: [normalized holes], ws, origin, base, baseHoles}:
     // ws names the workspace, it's new whenever a pack is loaded. origin is the shared pack it was loaded from,
     // {id, name, author, mine, version}, and base the key of what was loaded (see contentKey), to tell whether
-    // it's been changed since. That it's been published is kept outside the workspace (see published), so undo
+    // it's been changed since, baseHoles that of its holes alone (see holesKey). That it's been published is kept outside the workspace (see published), so undo
     // can't forget it.
     let pack = null;
     let current = 0;            // the hole being edited
@@ -677,6 +686,7 @@ window.lol9k1MinigolfEditorTools = (function () {
         pack = Object.assign(p, {ws: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
             origin: origin || null});
         pack.base = contentKey(pack);
+        pack.baseHoles = holesKey(pack);
         current = 0;
         selected = null;
     }
@@ -787,10 +797,15 @@ window.lol9k1MinigolfEditorTools = (function () {
         return hashText(canonical({name: p.name, hint: p.hint || '', holes: p.holes.map(T.toDef)}));
     }
 
+    // its holes alone: a pack published again with the same holes isn't a new version, only renamed
+    function holesKey(p) {
+        return hashText(canonical(p.holes.map(T.toDef)));
+    }
+
     // ---------------------------------------------------------------- published packs
-    // By workspace: the shared pack it was published as last, {id, name, author, version, key}, key as contentKey.
+    // By workspace: the shared pack it was published as last, {id, name, author, version, key, holes}, key as
+    // contentKey and holes as holesKey.
     const PUBLISHED_KEY = 'minigolfEditorPublished';
-    const BACKUP_KEY = 'minigolfEditorBackup';
     let published = {};
     try {
         published = JSON.parse(localStorage.getItem(PUBLISHED_KEY) || '{}') || {};
@@ -815,7 +830,7 @@ window.lol9k1MinigolfEditorTools = (function () {
     function markPublished(data) {
         delete published[pack.ws];
         published[pack.ws] = {id: data.id, name: data.name, author: data.author, version: data.version,
-            key: contentKey(pack)};
+            key: contentKey(pack), holes: holesKey(pack)};
         const kept = Object.keys(published).slice(-50);
         published = Object.fromEntries(kept.map(k => [k, published[k]]));
         remember(PUBLISHED_KEY, published);
@@ -826,6 +841,68 @@ window.lol9k1MinigolfEditorTools = (function () {
         const key = contentKey(pack);
         const own = published[pack.ws];
         return key !== pack.base && !(own && own.key === key);
+    }
+
+    // whether publishing an update would only change the name and the hint: the holes are those published last
+    function onlyRenaming() {
+        const own = published[pack.ws];
+        const last = own ? own.holes : pack.baseHoles;
+        return !!last && holesKey(pack) === last;
+    }
+
+    // ---------------------------------------------------------------- earlier work
+    // Before the workspace is replaced by a pack that's loaded, work that's nowhere else is kept: the last few
+    // workspaces, newest first and each one once, as {pack, current}. Restore brings them back, even after a
+    // reload. Undo does too, until the page is left.
+    const BACKUPS_KEY = 'minigolfEditorBackups';
+    const OLD_BACKUP_KEY = 'minigolfEditorBackup';  // the one workspace kept before there were several
+    const MAX_BACKUPS = 5;
+    let backupList = [];
+    try {
+        const list = JSON.parse(localStorage.getItem(BACKUPS_KEY) || '[]');
+        backupList = Array.isArray(list) ? list : [];
+    } catch (e) { /* storage blocked or garbage in it */ }
+    try {
+        const old = localStorage.getItem(OLD_BACKUP_KEY);
+        if (old !== null) {
+            localStorage.removeItem(OLD_BACKUP_KEY);
+            backupList.push(JSON.parse(old));
+        }
+    } catch (e) { /* storage blocked or garbage in it */ }
+    backupList = backupList.filter(b => b && b.pack && Array.isArray(b.pack.holes) && b.pack.holes.length);
+
+    function wsOf(b) {
+        return b.pack.ws || 'old';
+    }
+
+    function keepBackups(list) {
+        backupList = list.filter((b, i) => list.findIndex(o => wsOf(o) === wsOf(b)) === i).slice(0, MAX_BACKUPS);
+        remember(BACKUPS_KEY, backupList);
+    }
+    keepBackups(backupList);
+
+    // the workspace as it is now, if it's work of its own
+    function workNow() {
+        return holdsWork() ? [JSON.parse(snapshot())] : [];
+    }
+
+    // what can be brought back: not the workspace that's here, even if it was kept before
+    function backups() {
+        return backupList.filter(b => wsOf(b) !== pack.ws);
+    }
+
+    // what's here now joins the earlier work if it's work of its own, so it's a swap
+    function restoreBackup(ws) {
+        const saved = backupList.find(b => wsOf(b) === ws);
+        if (!saved) {
+            return;
+        }
+        keepBackups([...workNow(), ...backupList.filter(b => b !== saved)]);
+        checkpoint();
+        restore(JSON.stringify(saved));
+        pack.holes = pack.holes.map(T.normalize);
+        changed();
+        $('mgeNotice').textContent = `Back to ${pack.name}.`;
     }
 
     function isTested(h) {
@@ -849,9 +926,11 @@ window.lol9k1MinigolfEditorTools = (function () {
         } catch (e) { /* storage blocked, the workspace lasts as long as the page */ }
     }
 
-    // after every change: the game shows it, the panels too
+    // after every change: the game shows it, the panels too, and what was said about the pack before is old news
     function changed() {
         save();
+        $('mgePublishMessage').textContent = '';
+        $('mgeNotice').textContent = '';
         if (!testing) {
             game.preview(T.toDef(hole()));
         }
@@ -1401,40 +1480,21 @@ window.lol9k1MinigolfEditorTools = (function () {
         renderPanels();
     }
 
-    // Before the workspace is replaced by a pack that's loaded: work that's nowhere else is kept as the backup,
-    // which Restore brings back, even after a reload. Undo does too, until the page is left.
+    // before the workspace is replaced by a pack that's loaded, see backups
     function replacing() {
-        if (holdsWork()) {
-            remember(BACKUP_KEY, snapshot());
-        }
+        keepBackups([...workNow(), ...backupList]);
         checkpoint();
-    }
-
-    function backup() {
-        try {
-            const saved = localStorage.getItem(BACKUP_KEY);
-            return saved ? JSON.parse(saved) : null;
-        } catch (e) {
-            return null;
-        }
     }
 
     $('mgeRestore').addEventListener('click', function () {
-        const saved = backup();
-        if (!saved) {
-            return;
-        }
-        // what's here now becomes the backup if it's work of its own, so it's a swap
-        const now = holdsWork() ? snapshot() : null;
-        checkpoint();
-        restore(JSON.stringify(saved));
-        remember(BACKUP_KEY, now);
-        changed();
-        $('mgePublishMessage').textContent = `Back to ${pack.name}.`;
+        restoreBackup(this.dataset.ws);
     });
 
     $('mgeLoad').addEventListener('click', function () {
         const value = $('mgeLoadPack').value;
+        if (value === 'work') {
+            return;  // it's here already
+        }
         if (value.startsWith('shared:')) {
             openShared(value.slice('shared:'.length));
             return;
@@ -1446,7 +1506,7 @@ window.lol9k1MinigolfEditorTools = (function () {
 
     // loads a shared pack into the workspace, which can be undone like anything else
     function openShared(id, holeNumber) {
-        const message = $('mgePublishMessage');
+        const message = $('mgeNotice');
         message.textContent = 'Loading the pack...';
         return fetchShared(id).then(data => {
             replacing();
@@ -1454,13 +1514,10 @@ window.lol9k1MinigolfEditorTools = (function () {
             // its author holed every one of them before publishing it, they count until they're changed
             pack.holes.forEach(h => markTested(holeKey(h)));
             current = Math.max(0, Math.min(pack.holes.length - 1, (holeNumber || 1) - 1));
-            const option = $('mgeLoadPack').querySelector(`option[value="shared:${data.id}"]`);
-            if (option) {
-                $('mgeLoadPack').value = option.value;
-            }
             changed();
-            message.textContent = data.mine ? `Loaded your pack ${data.name}.`
-                : `Loaded ${data.name} by ${data.author}. Test it, change it, publish it as a pack of your own.`;
+            const test = `Press ▶ Test (T) to putt hole ${current + 1}`;
+            message.textContent = data.mine ? `Loaded your pack ${data.name}. ${test}.`
+                : `Loaded ${data.name} by ${data.author}. ${test}, change it, publish it as a pack of your own.`;
         }).catch(error => {
             message.textContent = `Couldn't load the pack: ${error.message}.`;
         });
@@ -1552,11 +1609,8 @@ window.lol9k1MinigolfEditorTools = (function () {
 
     function renderPanels() {
         const h = hole();
-        const saved = backup();
-        $('mgeRestore').hidden = !saved;
-        if (saved) {
-            $('mgeRestore').textContent = `↩ Back to ${saved.pack.name}`;
-        }
+        renderBackups();
+        syncPicker();
         setValue($('mgePackId'), pack.id);
         setValue($('mgePackName'), pack.name);
         setValue($('mgePackHint'), pack.hint);
@@ -1591,6 +1645,44 @@ window.lol9k1MinigolfEditorTools = (function () {
         renderChecks();
         renderShare();
         showCoords();
+    }
+
+    // the newest earlier work is a click away, the others in a list
+    function renderBackups() {
+        const [newest, ...older] = backups();
+        $('mgeRestore').hidden = !newest;
+        if (newest) {
+            $('mgeRestore').textContent = `↩ Back to ${newest.pack.name}`;
+            $('mgeRestore').dataset.ws = wsOf(newest);
+        }
+        $('mgeBackups').hidden = !older.length;
+        const list = $('mgeBackupList');
+        list.textContent = '';
+        older.forEach(b => {
+            const li = document.createElement('li');
+            const n = b.pack.holes.length;
+            li.appendChild(button(`↩ ${b.pack.name} (${n} ${n === 1 ? 'hole' : 'holes'})`, () => restoreBackup(wsOf(b))));
+            list.appendChild(li);
+        });
+    }
+
+    // The Map pack picker shows what's in the workspace: the shared pack it is, a pack that comes with the game
+    // as it is, or else the player's own work. Only when that changes, so a pack picked to load stays picked.
+    let pickerShows = null;
+    function syncPicker() {
+        const select = $('mgeLoadPack');
+        const shared = sharedPack();
+        let value = 'work';
+        if (shared && select.querySelector(`option[value="shared:${shared.id}"]`)) {
+            value = `shared:${shared.id}`;
+        } else if (!shared && !holdsWork() && PACKS[pack.id]) {
+            value = pack.id;
+        }
+        $('mgeWorkOption').textContent = `Your work: ${pack.name}`;
+        if (`${pack.ws} ${value}` !== pickerShows) {
+            pickerShows = `${pack.ws} ${value}`;
+            select.value = value;
+        }
     }
 
     // ---------------------------------------------------------------- properties of the selected thing
@@ -1804,6 +1896,10 @@ window.lol9k1MinigolfEditorTools = (function () {
     // What keeps the pack from being published: what the server would refuse, and holes not holed in a test run.
     function blockers() {
         const out = [];
+        const origin = pack.origin;
+        if (origin && !origin.mine && !updating() && !holdsWork()) {
+            out.push(`Change something first, it's still ${origin.name} by ${origin.author}.`);
+        }
         const name = T.cleanText(pack.name), hint = T.cleanText(pack.hint);
         if (!name) {
             out.push('The pack needs a name.');
@@ -1827,7 +1923,9 @@ window.lol9k1MinigolfEditorTools = (function () {
             } else if (refused.length) {
                 out.push(`${what}: ${refused.join(', ')}.`);
             } else if (!isTested(h)) {
-                out.push(`${what} hasn't been holed in a test run yet.`);
+                // a hole that's never been tested, or that's changed since: either way, as it is now
+                out.push(`${what} has to be holed in a test run as it is now: `
+                    + `${i === current ? '' : 'select it, '}press ▶ Test (T) and putt it into the cup.`);
             }
         });
         return out;
@@ -1838,8 +1936,16 @@ window.lol9k1MinigolfEditorTools = (function () {
         return !!(shared && shared.mine);
     }
 
+    function sameName(a, b) {
+        return T.cleanText(a).toLowerCase() === T.cleanText(b).toLowerCase();
+    }
+
     function renderShare() {
-        const problems = blockers();
+        const shared = sharedPack();
+        const work = holdsWork();
+        // a pack that comes with the game, as it is: nothing to point out, there's nothing to publish
+        const builtIn = !shared && !work && !!PACKS[pack.id];
+        const problems = builtIn ? [] : blockers();
         const list = $('mgeShareBlockers');
         list.textContent = '';
         problems.forEach(text => {
@@ -1848,16 +1954,25 @@ window.lol9k1MinigolfEditorTools = (function () {
             li.textContent = text;
             list.appendChild(li);
         });
-        const shared = sharedPack();
-        const unchanged = !holdsWork();
-        $('mgeShareStatus').textContent = !shared ? 'This pack is only in your browser.'
-            : shared.mine ? `This is your shared pack ${shared.name}, version ${shared.version}`
-                + (unchanged ? '.' : ', with changes that aren\'t published yet.')
-                : `Made from ${shared.name} by ${shared.author}. Published, it's a pack of your own that credits theirs.`;
-        $('mgePublish').textContent = updating() ? `Publish update (version ${shared.version + 1})` : 'Publish';
-        $('mgePublish').disabled = testing || problems.length > 0;
-        $('mgePublishNew').hidden = !updating();
-        $('mgePublishNew').disabled = testing || problems.length > 0;
+        const update = updating();
+        $('mgeShareStatus').textContent = builtIn
+            ? `${pack.name} comes with the game. Change something or build your own pack to publish it.`
+            : !shared ? 'This pack is only in your browser.'
+                : shared.mine ? `This is your shared pack ${shared.name}, version ${shared.version}`
+                    + (work ? ', with changes that aren\'t published yet.' : '.')
+                    : `Made from ${shared.name} by ${shared.author}. Published, it's a pack of your own that credits theirs.`;
+        $('mgePublish').textContent = !update ? 'Publish' : !work ? 'Up to date'
+            : onlyRenaming() ? 'Save name and hint' : `Publish update (version ${shared.version + 1})`;
+        $('mgePublish').disabled = testing || builtIn || problems.length > 0 || (update && !work);
+        // a copy of your own pack, which needs a name of its own
+        const taken = update && sameName(pack.name, shared.name);
+        $('mgePublishNew').hidden = $('mgePublishNewHelp').hidden = !update;
+        $('mgePublishNew').disabled = testing || problems.length > 0 || taken;
+        if (update) {
+            $('mgePublishNewHelp').textContent = taken
+                ? `To share a copy as a new pack, give it a name other than ${shared.name} first.`
+                : `Keeps ${shared.name} as it is and shares a copy under a new name.`;
+        }
     }
 
     function publish(asNew) {
@@ -1865,7 +1980,8 @@ window.lol9k1MinigolfEditorTools = (function () {
         const shared = sharedPack();
         const update = updating() && !asNew;
         const body = {name: T.cleanText(pack.name), hint: T.cleanText(pack.hint), holes: pack.holes.map(T.toDef)};
-        if (!update && shared) {
+        // a copy of somebody else's pack credits theirs, one of your own is just another pack
+        if (!update && shared && !shared.mine) {
             body.based_on = shared.id;
         }
         const ws = pack.ws;
@@ -1885,7 +2001,10 @@ window.lol9k1MinigolfEditorTools = (function () {
             if (pack.ws === ws) {
                 markPublished(data);
             }
-            message.textContent = `Published ${data.name}, version ${data.version}. `;
+            // the same holes under another name or hint aren't a new version
+            message.textContent = update && data.version === shared.version
+                ? `Saved the name and hint of ${data.name}, it's still version ${data.version}. `
+                : `Published ${data.name}, version ${data.version}. `;
             const link = document.createElement('a');
             link.href = root.dataset.browseUrl;
             link.textContent = 'See it with the other packs';
@@ -2115,9 +2234,6 @@ window.lol9k1MinigolfEditorTools = (function () {
         } catch (e) { /* storage blocked or garbage in it */ }
         if (!restored) {
             loadPack($('minigolf').dataset.course);
-        }
-        if (PACKS[pack.id]) {
-            $('mgeLoadPack').value = pack.id;
         }
     })();
     setTool('select');
