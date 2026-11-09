@@ -544,3 +544,68 @@ def test_the_editor_knows_every_limit(page: Page, alice):
     page.goto('/minigolf/editor')
     limits = json.loads(page.locator('#minigolfEditor').get_attribute('data-limits'))
     assert (limits['bumper'], limits['speed'], limits['blades']) == (80, 10, 8)
+
+
+def test_withdrawing_on_the_browse_page_says_what_happened(page: Page, seed, alice):
+    login(page, alice)
+    publish(page, 'Lanes', builtin_holes(page)[:1])
+    publish(page, 'More Lanes', builtin_holes(page)[:1])
+    page.goto('/minigolf/packs?mine=1')
+    empty = page.locator('.mgpEmpty')
+    expect(empty).to_be_hidden()
+    dialogs = []
+    page.on('dialog', lambda dialog: (dialogs.append(dialog.message), dialog.accept()))
+
+    # what the server says goes to the player, not an HTTP status
+    page.route('**/minigolf/api/packs/1', lambda route: route.fulfill(
+        status=403, content_type='application/json', body='"only its author or an admin can withdraw a pack"'))
+    with page.expect_event('dialog', lambda dialog: dialog.type == 'alert'):
+        page.get_by_role('button', name='Withdraw Lanes').click()
+    assert dialogs[-1] == "Couldn't withdraw Lanes: only its author or an admin can withdraw a pack"
+    expect(page.get_by_role('listitem', name='Lanes', exact=True)).to_have_count(1)
+    page.unroute('**/minigolf/api/packs/1')
+    page.get_by_role('button', name='Withdraw Lanes').click()
+    expect(page.get_by_role('listitem', name='Lanes', exact=True)).to_have_count(0)
+    expect(empty).to_be_hidden()
+
+    # one withdrawn in another tab is just taken off the list, and the last one gone leaves the empty list's words
+    assert page.request.delete('/minigolf/api/packs/2').status == 200
+    page.get_by_role('button', name='Withdraw More Lanes').click()
+    expect(page.get_by_role('listitem', name='More Lanes')).to_have_count(0)
+    expect(page.get_by_role('status')).to_have_text('More Lanes had been withdrawn already.')
+    expect(empty).to_be_visible()
+    expect(empty).to_contain_text("You don't share any packs yet.")
+    assert len([d for d in dialogs if d.startswith("Couldn't")]) == 1
+
+
+def test_the_holes_of_a_pack_that_couldnt_be_loaded_can_be_tried_again(page: Page, seed, alice):
+    login(page, alice)
+    publish(page, 'Lanes', builtin_holes(page)[:2])
+    failing = {'on': True}
+
+    def flaky(route):
+        if failing['on']:
+            route.fulfill(status=503, content_type='application/json', body='"down for a moment"')
+        else:
+            route.continue_()
+    page.route('**/minigolf/api/courses/**', flaky)
+    page.goto('/minigolf/packs')
+    holes = page.get_by_role('list', name='Holes of Lanes')
+    expect(holes).to_have_text("Couldn't load the holes of Lanes. Check your connection and try again. Retry")
+    failing['on'] = False
+    holes.get_by_role('button', name='Retry').click()
+    expect(holes.get_by_role('link')).to_have_count(2)
+    expect(holes.get_by_role('button', name='Retry')).to_have_count(0)
+    # the pictures are decoration, the links say which hole they are
+    expect(holes.locator('canvas[aria-hidden="true"]')).to_have_count(2)
+
+
+def test_when_a_pack_was_published_reads_easily(page: Page, seed, alice):
+    login(page, alice)
+    publish(page, 'Lanes', builtin_holes(page)[:1])
+    published = seed.query('select published_at from minigolf_pack_versions')[0]['published_at']
+    page.goto('/minigolf/packs')
+    when = page.get_by_role('listitem', name='Lanes').locator('time')
+    expect(when).to_have_text(f'today {published[11:16]}')
+    expect(when).to_have_attribute('title', published.replace('T', ' '))
+    expect(when).to_have_attribute('datetime', published)

@@ -73,15 +73,28 @@
         dot(h.cup[0], h.cup[1], 12, LOOK.cup);
     }
 
+    // The answer of the server, or an error with its message: it answers a failed request with a JSON string.
+    function request(url, options) {
+        return fetch(url, {credentials: 'include', ...options}).then(response => {
+            if (response.status === 401 || response.redirected) {
+                throw new Error('You were logged out. Log in again in another tab, then try again.');
+            }
+            return response.json().catch(() => null).then(data => {
+                if (!response.ok) {
+                    const error = new Error(typeof data === 'string' ? data : `HTTP ${response.status}`);
+                    error.status = response.status;
+                    throw error;
+                }
+                return data;
+            });
+        });
+    }
+
     function showHoles(item) {
         const url = root.dataset.courseUrl.replace(/-$/, encodeURIComponent(item.dataset.course));
         const list = item.querySelector('.mgpHoles');
-        fetch(url, {credentials: 'include'}).then(response => {
-            if (!response.ok || response.redirected) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            return response.json();
-        }).then(data => {
+        list.textContent = '';
+        request(url).then(data => {
             data.holes.forEach((h, i) => {
                 const li = document.createElement('li');
                 const link = document.createElement('a');
@@ -89,6 +102,8 @@
                 link.title = `Test hole ${i + 1} in the editor`;
                 link.setAttribute('aria-label', `Test hole ${i + 1}, ${h.name}, par ${h.par}`);
                 const canvas = document.createElement('canvas');
+                // the link's label says what's on it
+                canvas.setAttribute('aria-hidden', 'true');
                 drawHole(canvas, h);
                 const caption = document.createElement('span');
                 caption.textContent = `${i + 1}. ${h.name} (par ${h.par})`;
@@ -99,10 +114,33 @@
         }).catch(error => {
             console.error('Loading the holes failed:', error);
             const li = document.createElement('li');
-            li.textContent = "Couldn't load the holes.";
+            li.className = 'mgpHolesFailed';
+            li.append(`Couldn't load the holes of ${item.getAttribute('aria-label')}. `
+                + 'Check your connection and try again. ');
+            const retry = document.createElement('button');
+            retry.type = 'button';
+            retry.className = 'minigolfButton';
+            retry.textContent = 'Retry';
+            retry.addEventListener('click', () => showHoles(item));
+            li.appendChild(retry);
             list.appendChild(li);
         });
     }
+
+    // "today 17:11" or "yesterday 17:11" for when a pack was published, the date and time otherwise.
+    // The full timestamp stays in the title.
+    function showWhen(time) {
+        const published = time.getAttribute('datetime');
+        const day = date => [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+            .map(n => String(n).padStart(2, '0')).join('-');
+        const today = new Date();
+        const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+        const words = {[day(today)]: 'today', [day(yesterday)]: 'yesterday'}[published.slice(0, 10)];
+        if (words) {
+            time.textContent = `${words} ${published.slice(11, 16)}`;
+        }
+    }
+    root.querySelectorAll('.mgpFacts time[datetime]').forEach(showWhen);
 
     const items = Array.from(root.querySelectorAll('.mgpPack'));
     if ('IntersectionObserver' in window) {
@@ -123,14 +161,23 @@
             + 'games on it can still be finished.')) {
             return;
         }
-        fetch(`${root.dataset.packsUrl}/${item.dataset.pack}`, {method: 'DELETE', credentials: 'include'})
-            .then(response => {
-                if (!response.ok || response.redirected) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                item.remove();
-            }).catch(error => {
-                window.alert(`Couldn't withdraw the pack: ${error.message}`);
-            });
+        const notice = root.querySelector('.mgpNotice');
+        const withdrawn = () => {
+            item.remove();
+            if (!root.querySelector('.mgpPack')) {
+                root.querySelector('.mgpEmpty').hidden = false;
+            }
+        };
+        notice.textContent = '';
+        request(`${root.dataset.packsUrl}/${item.dataset.pack}`, {method: 'DELETE'}).then(withdrawn).catch(error => {
+            // from an earlier look at the page: it's gone already, which is what was asked for
+            if (error.status === 409) {
+                withdrawn();
+                notice.textContent = `${button.dataset.name} had been withdrawn already.`;
+                return;
+            }
+            console.error('Withdrawing the pack failed:', error);
+            window.alert(`Couldn't withdraw ${button.dataset.name}: ${error.message}`);
+        });
     }));
 })();

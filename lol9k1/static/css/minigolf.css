@@ -478,7 +478,19 @@ a.minigolfButton {
 }
 .mgpFacts {
     font-size: 0.85rem;
-    opacity: 0.8;
+    color: #999;  /* 5:1 on the page's dark grey */
+}
+/* quieter than the buttons next to it, and red: it takes the pack off offer */
+.minigolfButton.mgpWithdraw {
+    color: #ef9a9a;
+    background: none;
+    border: 2px solid #e57373;
+}
+.minigolfButton.mgpWithdraw:active {
+    background: rgba(239, 83, 80, 0.2);
+}
+.mgpNotice {
+    margin: 4px 0;
 }
 .mgpHoles {
     display: flex;

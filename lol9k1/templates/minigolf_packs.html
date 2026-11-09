@@ -13,7 +13,7 @@
     <p>
       Packs everybody at the party built in the <a href="{{ url_for('minigolf.editor') }}">🛠 map editor</a> and shared.
       <b>Play</b> one hot seat or over the network, every pack has a Hall of Fame of its own.
-      <b>Test</b> one in the editor: click a hole to putt it there, nothing gets saved, and change it into a pack of your own.
+      <b>Test</b> one in the editor: click a hole to open it there and test it, nothing gets saved, and change it into a pack of your own.
       You can share up to {{ max_packs }} packs. An update of a pack starts a fresh Hall of Fame, as its holes
       aren't the same anymore, but its rounds on earlier versions still count for <i>most played</i>.
     </p>
@@ -30,6 +30,7 @@
       | <a href="{{ url_for('minigolf.minigolf') }}">⛳ back to the game</a>
     </p>
 
+    <p class="mgpNotice" role="status"></p>
     <ul class="mgpList" aria-label="Shared map packs">
       {% for p in packs %}
         <li class="mgpPack" data-course="{{ p.course }}" data-pack="{{ p.id }}" aria-label="{{ p.name }}"
@@ -50,7 +51,10 @@
           {% if p.hint %}<p class="mgpHint">{{ p.hint }}</p>{% endif %}
           <p class="mgpFacts">
             {{ p.holes }} hole{{ 's' if p.holes != 1 }}, par {{ p.par }} ·
-            version {{ p.version }}, {{ p.published_at|replace('T', ' ') }} ·
+            version {{ p.version }},
+            <time datetime="{{ p.published_at }}" title="{{ p.published_at|replace('T', ' ') }}">
+              {{- p.published_at[:10] }} {{ p.published_at[11:16] -}}
+            </time> ·
             {% if p.rounds %}
               {{ p.rounds }} round{{ 's' if p.rounds != 1 }} by {{ p.players }} player{{ 's' if p.players != 1 }},
               best {{ p.best.total }} by {{ p.best.name }}
@@ -66,12 +70,12 @@
           </p>
           <ol class="mgpHoles" aria-label="Holes of {{ p.name }}"></ol>
         </li>
-      {% else %}
-        <li class="mgpEmpty">
-          {% if mine %}You don't share any packs yet.{% else %}Nobody shares a pack yet.{% endif %}
-          Build one in the <a href="{{ url_for('minigolf.editor') }}">🛠 map editor</a> and hit <b>Publish</b>!
-        </li>
       {% endfor %}
+      {#- also shown once the last pack on the page is withdrawn #}
+      <li class="mgpEmpty"{% if packs %} hidden{% endif %}>
+        {% if mine %}You don't share any packs yet.{% else %}Nobody shares a pack yet.{% endif %}
+        Build one in the <a href="{{ url_for('minigolf.editor') }}">🛠 map editor</a> and hit <b>Publish</b>!
+      </li>
     </ul>
   </div>
 {% endblock %}
