@@ -1,9 +1,11 @@
 """What a shared minigolf map pack may hold, see lol9k1/minigolf_packs.py."""
 import copy
+import json
 import math
 
 import pytest
 
+from lol9k1 import minigolf_packs
 from lol9k1.minigolf_packs import (ITEM_NAMES, LIST_LIMITS, MAX_BYTES, MAX_HOLES, MAX_WALL_CORNERS, PackError,
                                    clean_text, validate_holes)
 
@@ -97,6 +99,21 @@ def test_a_pack_has_a_size_limit():
                water=[[60.123456789, 250.123456789, 1.123456789, 1.123456789]] * 30,
                boosts=[[60.123456789, 250.123456789, 1.123456789, 1.123456789, 0.123456789, 0.123456789]] * 30)
     refused(f'{MAX_BYTES // 1024} KB', *[big] * MAX_HOLES)
+
+
+def test_the_size_is_measured_in_utf8_bytes_like_the_editor_does(monkeypatch):
+    accented = hole(name='é' * 40)
+    utf8 = len(json.dumps([accented], separators=(',', ':'), ensure_ascii=False).encode())
+    # escaped, every é would take 6 characters rather than 2 bytes and the pack would be too big
+    assert len(json.dumps([accented], separators=(',', ':'))) > utf8
+    monkeypatch.setattr(minigolf_packs, 'MAX_BYTES', utf8)
+    assert check(accented) == [accented]
+    monkeypatch.setattr(minigolf_packs, 'MAX_BYTES', utf8 - 1)
+    refused('too big', accented)
+
+
+def test_a_huge_whole_number_is_refused_rather_than_crashing():
+    refused('the x of the cup', hole(cup=[json.loads('1' + '0' * 400), 200]))
 
 
 @pytest.mark.parametrize('changes, message', [

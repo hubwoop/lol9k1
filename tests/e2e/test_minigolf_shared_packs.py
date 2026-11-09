@@ -382,6 +382,10 @@ def test_a_withdrawn_pack_nobody_played_goes_after_a_while(page: Page, seed, ali
     assert [r['pack'] for r in seed.query('select pack from minigolf_pack_versions order by pack')] == [2, 3, 4, 5]
     assert page.request.get('/minigolf/api/packs/1').status == 404
     assert page.request.get('/minigolf/api/courses/pack:2').status == 200
+    # the pack itself is still known without a version: it was withdrawn, and Bob's remix still credits it
+    assert page.request.delete('/minigolf/api/packs/1').status == 409
+    remix = next(p for p in packs(page) if p['name'] == 'Remix')
+    assert remix['based_on']['name'] == 'Gone'
 
 
 def test_a_lobby_on_a_withdrawn_pack_can_still_be_played(page: Page, seed, alice, bob, new_user_page):

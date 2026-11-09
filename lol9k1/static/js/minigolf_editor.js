@@ -1912,7 +1912,8 @@ window.lol9k1MinigolfEditorTools = (function () {
         if (pack.holes.length > LIMITS.holes) {
             out.push(`A pack has ${LIMITS.holes} holes at most, this one has ${pack.holes.length}.`);
         }
-        if (JSON.stringify(pack.holes.map(T.toDef)).length > LIMITS.bytes) {
+        // in UTF-8 bytes, like the server
+        if (new TextEncoder().encode(JSON.stringify(pack.holes.map(T.toDef))).length > LIMITS.bytes) {
             out.push(`The pack is too big, it may take ${Math.floor(LIMITS.bytes / 1024)} KB at most.`);
         }
         pack.holes.forEach((h, i) => {

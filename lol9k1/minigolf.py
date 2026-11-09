@@ -759,7 +759,8 @@ def list_packs(sort: str = 'popular', pack_id: Optional[int] = None, author: Opt
               where r.course = p.course order by {TOTAL}, r.id limit 1) as best
       from packs p
         join users u on p.author = u.id
-        join minigolf_pack_versions v on v.id = p.version
+        -- a withdrawn pack nobody played has no version left once it's pruned, but it's still the pack it was
+        left join minigolf_pack_versions v on v.id = p.version
         left join minigolf_packs b on b.id = p.based_on
         left join users bu on bu.id = b.author
       where {' and '.join(where)}
@@ -823,6 +824,8 @@ def packs_api():
 def pack_api(pack_id: int):
     """A shared pack with the holes of its current version, withdrawn or not: for testing it in the editor."""
     pack = _pack_or_404(pack_id)
+    if pack['version'] is None:
+        raise _ApiError(GONE_PACK, 404)
     return json.dumps({**pack, 'holes_data': _holes_of(pack['course'])})
 
 

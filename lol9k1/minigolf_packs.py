@@ -62,14 +62,15 @@ def validate_holes(holes, width: int, height: int, max_strokes: int) -> list[dic
     if not isinstance(holes, list) or not 1 <= len(holes) <= MAX_HOLES:
         raise PackError(f'a pack has 1 to {MAX_HOLES} holes')
     clean = [_Hole(width, height, max_strokes, i + 1).clean(h) for i, h in enumerate(holes)]
-    if len(json.dumps(clean, separators=(',', ':'))) > MAX_BYTES:
+    # in UTF-8 bytes, as the editor measures it (with ensure_ascii every non-ASCII character would count 6 or 12)
+    if len(json.dumps(clean, separators=(',', ':'), ensure_ascii=False).encode()) > MAX_BYTES:
         raise PackError(f'the pack is too big, it may take {MAX_BYTES // 1024} KB at most')
     return clean
 
 
 def is_number(value) -> bool:
-    """A finite int or float, not a bool."""
-    return type(value) in (int, float) and math.isfinite(value)
+    """A finite int or float, not a bool. Ints are always finite: math.isfinite would overflow on huge ones."""
+    return type(value) is int or (type(value) is float and math.isfinite(value))
 
 
 def inside_polygon(x: float, y: float, poly: list) -> bool:
