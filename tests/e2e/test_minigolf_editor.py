@@ -12,15 +12,21 @@ def open_editor(page: Page) -> None:
     expect(page.locator('#mgeHoles li').first).to_be_visible()
 
 
+def _overlay_box(page: Page) -> dict:
+    overlay = page.locator('.mgeOverlay')
+    overlay.scroll_into_view_if_needed()
+    return overlay.bounding_box()
+
+
 def click(page: Page, x: float, y: float) -> None:
     """Clicks the editor's canvas in course coordinates."""
-    box = page.locator('.mgeOverlay').bounding_box()
+    box = _overlay_box(page)
     scale = box['width'] / 640
     page.mouse.click(box['x'] + x * scale, box['y'] + y * scale)
 
 
 def drag(page: Page, from_x: float, from_y: float, to_x: float, to_y: float) -> None:
-    box = page.locator('.mgeOverlay').bounding_box()
+    box = _overlay_box(page)
     scale = box['width'] / 640
     page.mouse.move(box['x'] + from_x * scale, box['y'] + from_y * scale)
     page.mouse.down()

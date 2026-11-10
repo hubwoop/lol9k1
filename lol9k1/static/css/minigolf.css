@@ -347,6 +347,10 @@
     font-weight: bold;
 }
 
+.mgeHoles button[data-tested="true"]::before {
+    content: "✓ ";
+    color: #2e7d32;
+}
 .mgeHoles button[data-problems="error"]::after {
     content: " ⛔";
 }
@@ -393,6 +397,12 @@
     color: #2e7d32;
 }
 
+.mgeShare {
+    margin-top: 10px;
+}
+.mgeShare h4 {
+    margin-bottom: 4px;
+}
 .mgeExport {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -432,4 +442,101 @@
 .mgePackNote {
     color: #8a5a00;
     margin: 0;
+}
+
+/* what was loaded or brought back, next to the picker so it's seen */
+.mgeNotice {
+    color: #1b5e20;
+    font-weight: bold;
+    margin: 3px 0;
+}
+
+.mgeNotice:empty {
+    display: none;
+}
+
+.mgeBackups summary {
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.mgeBackupList {
+    list-style: none;
+    margin: 2px 0;
+    padding: 0;
+}
+
+.mgeBackupList li {
+    margin: 2px 0;
+}
+
+/* ---------------------------------------------------------------- the browser of shared packs */
+.mgpFilters a[aria-current="true"] {
+    font-weight: bold;
+}
+.mgpList {
+    list-style: none;
+    padding: 0;
+}
+.mgpPack {
+    border: 2px solid #2e7d32;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+}
+.mgpHead {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 6px;
+}
+.mgpHead h3 {
+    margin: 0;
+    font-size: 1.3rem;
+}
+a.minigolfButton {
+    display: inline-block;
+    text-decoration: none;
+}
+.mgpHint, .mgpFacts {
+    margin: 4px 0;
+}
+.mgpFacts {
+    font-size: 0.85rem;
+    color: #999;  /* 5:1 on the page's dark grey */
+}
+/* quieter than the buttons next to it, and red: it takes the pack off offer */
+.minigolfButton.mgpWithdraw {
+    color: #ef9a9a;
+    background: none;
+    border: 2px solid #e57373;
+}
+.minigolfButton.mgpWithdraw:active {
+    background: rgba(239, 83, 80, 0.2);
+}
+.mgpNotice {
+    margin: 4px 0;
+}
+.mgpHoles {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    list-style: none;
+    padding: 4px 0;
+    margin: 0;
+}
+.mgpHoles a {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.75rem;
+    color: inherit;
+}
+.mgpHoles canvas {
+    width: 192px;
+    height: 120px;
+    border-radius: 4px;
+}
+.mgpHoles a:hover canvas, .mgpHoles a:focus canvas {
+    outline: 3px solid #ffeb3b;
 }

@@ -5,6 +5,7 @@
        data-submit-url="{{ url_for('minigolf.submit_round_api') }}"
        data-leaderboard-url="{{ url_for('minigolf.leaderboard_api') }}"
        data-games-url="{{ url_for('minigolf.games_api') }}"
+       data-course-url="{{ url_for('minigolf.course_api', course='-') }}"
        data-max-players="{{ max_players }}"
        data-courses="{{ courses|tojson|forceescape }}"
        data-course="{{ course }}"
@@ -19,11 +20,21 @@
         <p class="minigolfPack">
           <label for="minigolfCourse">Map pack</label>
           <select id="minigolfCourse">
-            {% for id, c in courses.items() %}
+            {% for id, c in courses.items() if not c.shared %}
               <option value="{{ id }}"{% if id == course %} selected{% endif %}>{{ c.name }}</option>
             {% endfor %}
+            {% set shared = courses.items()|selectattr('1.shared')|list %}
+            {% if shared %}
+              <optgroup label="Shared by players">
+                {% for id, c in shared %}
+                  <option value="{{ id }}"{% if id == course %} selected{% endif %}>{{ c.name }} by {{ c.author }}</option>
+                {% endfor %}
+              </optgroup>
+            {% endif %}
           </select>
         </p>
+        {#- why the picked pack can't be loaded, or can only be played hot seat -#}
+        <p id="minigolfCourseNotice" class="minigolfHint" role="status" hidden></p>
         <p id="minigolfCourseHint" class="minigolfHint"></p>
         <p class="minigolfHint">Hot seat for up to {{ max_players }} players. Take turns on this computer!</p>
         <ol id="minigolfPlayers"></ol>

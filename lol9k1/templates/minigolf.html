@@ -6,7 +6,10 @@
 {% endblock %}
 {% block body %}
   {% include '_minigolf_game.html' %}
-  <p class="minigolfEditorLink"><a href="{{ url_for('minigolf.editor') }}">🛠 Map editor</a>: build and test holes of your own.</p>
+  <p class="minigolfEditorLink">
+    <a href="{{ url_for('minigolf.packs_page') }}">🗺 Map packs</a>: browse, test and play the packs everybody shares.
+    <a href="{{ url_for('minigolf.editor') }}">🛠 Map editor</a>: build and test holes of your own.
+  </p>
 
   <div class="row minigolfBoards">
     <div class="col-md-6">

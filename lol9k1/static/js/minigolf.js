@@ -48,6 +48,16 @@ window.lol9k1MinigolfRules = (function () {
 })();
 
 /*
+ * The colours of the things on a course, shared with the pictures of holes on /minigolf/packs
+ * (static/js/minigolf_packs.js), so a hole looks the same there.
+ */
+window.lol9k1MinigolfLook = Object.freeze({
+    rough: '#1b4d1e', fairway: '#4caf50', sand: '#e6d28a', water: '#1e88e5', boost: 'rgba(255,235,59,0.25)',
+    tee: 'rgba(255,255,255,0.25)', cup: '#111', wall: '#6d4c41', block: '#8d6e63', house: '#c62828',
+    bumper: '#e53935', slider: '#ff9800',
+});
+
+/*
  * The map packs, by id: their holes and a hint shown when the pack is picked. Plain data,
  * so it can be checked without playing it (tests/e2e/test_minigolf_packs.py), and edited and
  * exported back as code by the map editor (/minigolf/editor, static/js/minigolf_editor.js).
@@ -243,6 +253,7 @@ window.lol9k1MinigolfPacks = (function () {
         return;
     }
     const rules = window.lol9k1MinigolfRules;
+    const LOOK = window.lol9k1MinigolfLook;
     // On the map editor's page (static/js/minigolf_editor.js) the game shows the hole being edited
     // and test plays it, see window.lol9k1Minigolf below.
     const editorMode = root.dataset.mode === 'editor';
@@ -279,31 +290,86 @@ window.lol9k1MinigolfPacks = (function () {
     const PACKS = window.lol9k1MinigolfPacks;
     const CLASSIC = PACKS.classic.holes;
 
-    // the map packs as the server knows them, by id: {name, holes}
+    // the map packs as the server knows them, by id: {name, holes, playable}, and for shared packs
+    // {author, shared, withdrawn, latest}, latest the id of the pack's current version
     const SERVER_COURSES = JSON.parse(root.dataset.courses || '{}');
-    let course = null;      // the map pack being played, an id of PACKS
-    let HOLES = null;       // its holes
+    // Packs shared by players ('pack:<version>') aren't in PACKS, their holes are loaded when they're picked
+    // or a game on one is joined. A version's holes never change, so they're loaded once.
+    const SHARED = {};      // by id: {holes, hint}
+    const loading = {};     // by id: the promise of its holes
+    const loadFailed = {};  // by id: why its holes couldn't be loaded the last time, 'logged out', 'gone' or 'failed'
+    let course = null;      // the map pack being played, an id of PACKS or SHARED
+    let HOLES = null;       // its holes, null while a shared pack is loading
+
+    function packOf(id) {
+        return Object.prototype.hasOwnProperty.call(PACKS, id) ? PACKS[id]
+            : (Object.prototype.hasOwnProperty.call(SHARED, id) ? SHARED[id] : null);
+    }
+
+    // Loads a shared pack's holes, if they aren't here yet. Resolves to the pack.
+    function ensurePack(id) {
+        if (packOf(id)) {
+            return Promise.resolve(packOf(id));
+        }
+        if (!loading[id]) {
+            loading[id] = api('GET', root.dataset.courseUrl.replace(/-$/, encodeURIComponent(id))).then(data => {
+                delete loadFailed[id];
+                SHARED[id] = {holes: data.holes, hint: data.hint ? `${data.hint} (by ${data.author})` : `By ${data.author}.`};
+                SERVER_COURSES[id] = Object.assign({}, SERVER_COURSES[id],
+                    {name: data.name, holes: data.holes.length, author: data.author, shared: true,
+                        playable: data.playable, withdrawn: data.withdrawn, latest: data.latest});
+                return SHARED[id];
+            }, error => {
+                console.error(`Loading the map pack ${id} failed:`, error);
+                loadFailed[id] = error.message === 'logged out' ? 'logged out' : (error.status === 404 ? 'gone' : 'failed');
+                throw error;
+            }).finally(() => {
+                delete loading[id];
+            });
+        }
+        return loading[id];
+    }
 
     // The server validates rounds against its own number of holes. Returns why a pack can't be played.
     function courseMismatch(id) {
         const known = SERVER_COURSES[id];
-        if (!PACKS[id] || !known) {
+        const pack = packOf(id);
+        if (!pack && known && known.shared) {
+            return {
+                'logged out': `You were logged out, so ${known.name} couldn't be loaded. Log in again to keep playing.`,
+                gone: `${known.name} isn't there anymore. Reload the page for the packs on offer.`,
+                failed: `Couldn't load ${known.name}. Check your connection and try again.`,
+            }[loadFailed[id]] || `Loading ${known.name}...`;
+        }
+        if (!pack || !known) {
             return `This page doesn't know the map pack "${id}". Reload it, maybe?`;
         }
-        if (known.holes !== PACKS[id].holes.length) {
-            return `${known.name} has ${PACKS[id].holes.length} holes, but the server expects ${known.holes}. Rounds can't be saved.`;
+        if (known.holes !== pack.holes.length) {
+            return `${known.name} has ${pack.holes.length} holes, but the server expects ${known.holes}. Rounds can't be saved.`;
         }
         return null;
     }
 
-    function courseName(id) {
-        return SERVER_COURSES[id] ? SERVER_COURSES[id].name : id;
+    function courseName(id, fallback) {
+        return SERVER_COURSES[id] ? SERVER_COURSES[id].name : (fallback || id);
+    }
+
+    // Whether the picked pack can't be played (yet), it says why. A shared pack that couldn't be loaded
+    // is loaded again.
+    function cantPlay() {
+        const mismatch = courseMismatch(course);
+        if (mismatch && loadFailed[course] && !packOf(course)) {
+            pickPack(course);
+        } else if (mismatch) {
+            setStatus(mismatch);
+        }
+        return !!mismatch;
     }
 
     // an unknown pack falls back to the classic one, the course and its holes always go together
     function usePack(id) {
-        course = PACKS[id] ? id : 'classic';
-        HOLES = PACKS[course].holes;
+        course = packOf(id) ? id : 'classic';
+        HOLES = packOf(course).holes;
     }
 
     // ---------------------------------------------------------------- dom
@@ -867,7 +933,7 @@ window.lol9k1MinigolfPacks = (function () {
     }
 
     function drawBackground() {
-        ctx.fillStyle = '#1b4d1e';
+        ctx.fillStyle = LOOK.rough;
         ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = 'rgba(255,255,255,0.03)';
         for (let x = 0; x < W; x += 40) {
@@ -880,7 +946,7 @@ window.lol9k1MinigolfPacks = (function () {
         polyPath(hole.outline);
         ctx.save();
         ctx.clip();
-        ctx.fillStyle = '#4caf50';
+        ctx.fillStyle = LOOK.fairway;
         ctx.fillRect(0, 0, W, H);
         ctx.fillStyle = '#43a047';
         for (let x = -H; x < W; x += 32) {
@@ -892,7 +958,7 @@ window.lol9k1MinigolfPacks = (function () {
             ctx.fill();
         }
         hole.sand.forEach(r => {
-            ctx.fillStyle = '#e6d28a';
+            ctx.fillStyle = LOOK.sand;
             roundRect(r[0], r[1], r[2], r[3], 10);
             ctx.fill();
             ctx.fillStyle = '#cdb76a';
@@ -902,7 +968,7 @@ window.lol9k1MinigolfPacks = (function () {
             }
         });
         hole.water.forEach(r => {
-            ctx.fillStyle = '#1e88e5';
+            ctx.fillStyle = LOOK.water;
             ctx.fillRect(r[0], r[1], r[2], r[3]);
             ctx.strokeStyle = 'rgba(255,255,255,0.45)';
             ctx.lineWidth = 2;
@@ -920,7 +986,7 @@ window.lol9k1MinigolfPacks = (function () {
             }
         });
         hole.boosts.forEach(r => {
-            ctx.fillStyle = 'rgba(255,235,59,0.25)';
+            ctx.fillStyle = LOOK.boost;
             ctx.fillRect(r[0], r[1], r[2], r[3]);
             const cx = r[0] + r[2] / 2, cy = r[1] + r[3] / 2;
             const angle = Math.atan2(r[5], r[4]);
@@ -951,7 +1017,7 @@ window.lol9k1MinigolfPacks = (function () {
             if (!seats.length) {
                 return;
             }
-            ctx.fillStyle = 'rgba(255,255,255,0.25)';
+            ctx.fillStyle = LOOK.tee;
             ctx.fillRect(tee[0] - 14, tee[1] - 14, 28, 28);
             if (own) {
                 ctx.lineWidth = 2;
@@ -963,7 +1029,7 @@ window.lol9k1MinigolfPacks = (function () {
         });
 
         // cup
-        ctx.fillStyle = '#111';
+        ctx.fillStyle = LOOK.cup;
         ctx.beginPath();
         ctx.arc(hole.cup[0], hole.cup[1], CUP_R, 0, Math.PI * 2);
         ctx.fill();
@@ -974,7 +1040,7 @@ window.lol9k1MinigolfPacks = (function () {
         // walls
         ctx.lineJoin = 'round';
         polyPath(hole.outline);
-        ctx.strokeStyle = '#6d4c41';
+        ctx.strokeStyle = LOOK.wall;
         ctx.lineWidth = 8;
         ctx.stroke();
         ctx.strokeStyle = '#a1887f';
@@ -982,9 +1048,9 @@ window.lol9k1MinigolfPacks = (function () {
         ctx.stroke();
         hole.blocks.forEach(b => {
             polyPath(b);
-            ctx.fillStyle = hole.house ? '#c62828' : '#8d6e63';
+            ctx.fillStyle = hole.house ? LOOK.house : LOOK.block;
             ctx.fill();
-            ctx.strokeStyle = '#6d4c41';
+            ctx.strokeStyle = LOOK.wall;
             ctx.lineWidth = 8;
             ctx.stroke();
             ctx.strokeStyle = '#bcaaa4';
@@ -1004,7 +1070,7 @@ window.lol9k1MinigolfPacks = (function () {
             ctx.beginPath();
             ctx.arc(bp[0] + 3, bp[1] + 3, bp[2], 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = lit ? '#fff59d' : '#e53935';
+            ctx.fillStyle = lit ? '#fff59d' : LOOK.bumper;
             ctx.beginPath();
             ctx.arc(bp[0], bp[1], bp[2], 0, Math.PI * 2);
             ctx.fill();
@@ -1022,7 +1088,7 @@ window.lol9k1MinigolfPacks = (function () {
         hole.sliders.forEach(s => {
             const o = sliderOffset(s, time);
             const x = s.x + o.x, y = s.y + o.y;
-            ctx.fillStyle = '#ff9800';
+            ctx.fillStyle = LOOK.slider;
             ctx.fillRect(x, y, s.w, s.h);
             ctx.fillStyle = '#212121';
             for (let i = 0; i < s.h; i += 14) {
@@ -1388,9 +1454,7 @@ window.lol9k1MinigolfPacks = (function () {
     });
 
     document.getElementById('minigolfStart').addEventListener('click', function () {
-        const mismatch = courseMismatch(course);
-        if (mismatch) {
-            setStatus(mismatch);
+        if (cantPlay()) {
             return;
         }
         const names = Array.from(playerList.querySelectorAll('input')).map((input, i) =>
@@ -1403,7 +1467,7 @@ window.lol9k1MinigolfPacks = (function () {
 
     document.getElementById('minigolfAgain').addEventListener('click', function () {
         if (testRun) {
-            testHole(testRun.def, testRun.players);
+            testHole(testRun.def, testRun.players, testRun.onFinish);
             return;
         }
         if (net) {
@@ -1502,6 +1566,9 @@ window.lol9k1MinigolfPacks = (function () {
         }
         if (testRun) {
             document.getElementById('minigolfSaved').textContent = 'A test run, nothing was saved.';
+            if (testRun.onFinish) {
+                testRun.onFinish(players.some(p => p.ball.sunk));
+            }
         } else if (net) {
             // the server saved everybody's rounds when the last ball dropped
             clearTimeout(net.pollTimer);
@@ -1516,27 +1583,17 @@ window.lol9k1MinigolfPacks = (function () {
     function submitRound(player) {
         const saved = document.getElementById('minigolfSaved');
         saved.textContent = 'Saving your round...';
-        fetch(root.dataset.submitUrl, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            credentials: 'include',
-            body: JSON.stringify({course, strokes: player.scores}),
-        }).then(response => {
-            if (response.status === 401) {
-                throw new Error('logged out');
-            }
-            if (!response.ok || response.redirected) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            return response.json();
-        }).then(data => {
+        api('POST', root.dataset.submitUrl, {course, strokes: player.scores}).then(data => {
             saved.textContent = `${player.name}'s round (${total(player)}) went into the Hall of Fame.`;
             renderLeaderboard(data);
         }).catch(error => {
             console.error('Saving the minigolf round failed:', error);
             saved.textContent = error.message === 'logged out'
                 ? 'You were logged out, so your round could not be saved. Log in again to keep playing.'
-                : 'Could not save your round, sorry!';
+                // the server answers 404 for a shared pack's version that's gone, nobody played it for days
+                : (error.status === 404
+                    ? 'Could not save your round: this version of the pack is gone. Reload the page for the latest.'
+                    : 'Could not save your round, sorry!');
         });
     }
 
@@ -1649,7 +1706,7 @@ window.lol9k1MinigolfPacks = (function () {
         }
         games.forEach(g => {
             const li = el('li');
-            li.appendChild(el('span', `${g.host}'s game (${courseName(g.course)}): ${g.players.join(', ')}`));
+            li.appendChild(el('span', `${g.host}'s game (${courseName(g.course, g.course_name)}): ${g.players.join(', ')}`));
             let label = null;
             if (g.status === 'playing') {
                 label = 'Resume';
@@ -1663,14 +1720,17 @@ window.lol9k1MinigolfPacks = (function () {
                 button.type = 'button';
                 button.setAttribute('aria-label', `${label} ${g.host}'s game`);
                 button.addEventListener('click', () => {
-                    const mismatch = courseMismatch(g.course);
-                    if (mismatch) {
-                        setStatus(mismatch);
-                        return;
-                    }
-                    const request = label === 'Join' ? api('POST', `${gamesUrl}/${g.id}/join`)
-                        : api('GET', `${gamesUrl}/${g.id}`);
-                    request.then(enterNet).catch(error => {
+                    // a game on a shared pack plays its holes, whichever pack is picked here
+                    ensurePack(g.course).then(() => {
+                        const mismatch = courseMismatch(g.course);
+                        if (mismatch) {
+                            setStatus(mismatch);
+                            return;
+                        }
+                        const request = label === 'Join' ? api('POST', `${gamesUrl}/${g.id}/join`)
+                            : api('GET', `${gamesUrl}/${g.id}`);
+                        return request.then(enterNet);
+                    }).catch(error => {
                         failed('Joining the game', error);
                         refreshGames();
                     });
@@ -1684,9 +1744,7 @@ window.lol9k1MinigolfPacks = (function () {
     }
 
     document.getElementById('minigolfHost').addEventListener('click', function () {
-        const mismatch = courseMismatch(course);
-        if (mismatch) {
-            setStatus(mismatch);
+        if (cantPlay()) {
             return;
         }
         api('POST', gamesUrl, {course}).then(enterNet).catch(error => failed('Hosting a game', error));
@@ -1791,7 +1849,7 @@ window.lol9k1MinigolfPacks = (function () {
     }
 
     function showLobby(view) {
-        document.getElementById('minigolfLobbyTitle').textContent = `${view.host}'s game: ${courseName(view.course)}`;
+        document.getElementById('minigolfLobbyTitle').textContent = `${view.host}'s game: ${courseName(view.course, view.course_name)}`;
         const list = document.getElementById('minigolfLobbyPlayers');
         list.textContent = '';
         view.players.forEach((p, i) => {
@@ -1972,12 +2030,69 @@ window.lol9k1MinigolfPacks = (function () {
 
     // ---------------------------------------------------------------- map packs
     const courseSelect = document.getElementById('minigolfCourse');
+    const courseNotice = document.getElementById('minigolfCourseNotice');
+    const hostButton = document.getElementById('minigolfHost');
+
+    // Next to the picker: why the picked pack couldn't be loaded, with a button to try again, or why it can only
+    // be played hot seat (it's withdrawn, or an older version of a pack, from an old link). Only what's on offer
+    // can be hosted.
+    function showCourseNotice(id) {
+        const known = SERVER_COURSES[id];
+        courseNotice.textContent = '';
+        if (loadFailed[id] && !packOf(id)) {
+            courseNotice.append(courseMismatch(id), ' ');
+            const retry = el('button', 'Retry', 'minigolfButton');
+            retry.type = 'button';
+            retry.addEventListener('click', () => pickPack(id));
+            courseNotice.appendChild(retry);
+        } else if (known && known.shared && known.playable === false) {
+            if (known.withdrawn) {
+                courseNotice.append("This pack was withdrawn: hot seat only, it can't be hosted over the network.");
+            } else {
+                courseNotice.append("This is an older version of the pack: hot seat only, it can't be hosted over the network.");
+                const latest = SERVER_COURSES[known.latest];
+                if (latest) {
+                    courseNotice.append(' ');
+                    const link = el('a', `Play ${latest.name}, its latest version`);
+                    link.href = `?course=${encodeURIComponent(known.latest)}`;
+                    courseNotice.appendChild(link);
+                }
+            }
+        }
+        courseNotice.hidden = !courseNotice.textContent;
+        hostButton.disabled = !!(known && known.playable === false);
+        hostButton.title = hostButton.disabled ? 'Only the packs on offer can be hosted, this one is hot seat only' : '';
+    }
 
     // the pack to play next on this computer, shown on the title screen with its leaderboard
     function pickPack(id) {
+        const hint = document.getElementById('minigolfCourseHint');
+        if (!packOf(id) && SERVER_COURSES[id] && SERVER_COURSES[id].shared) {
+            // a shared pack: nothing can be played until its holes are here, courseMismatch says so
+            course = id;
+            HOLES = null;
+            // the title screen shows a hole meanwhile, the one it shows already or a classic one
+            hole = hole || prepareHole(CLASSIC[0]);
+            hint.textContent = '';
+            delete loadFailed[id];
+            showCourseNotice(id);
+            setStatus(courseMismatch(id));
+            ensurePack(id).then(() => {
+                if (course === id && !HOLES && !net && state === 'setup') {
+                    pickPack(id);
+                }
+            }).catch(() => {
+                if (course === id && !HOLES) {
+                    showCourseNotice(id);
+                    setStatus(courseMismatch(id));
+                }
+            });
+            return;
+        }
         usePack(id);
         hole = prepareHole(HOLES[Math.floor(Math.random() * HOLES.length)]);
-        document.getElementById('minigolfCourseHint').textContent = PACKS[id] ? PACKS[id].hint : '';
+        hint.textContent = packOf(course).hint || '';
+        showCourseNotice(course);
         const mismatch = courseMismatch(id);
         setStatus(mismatch || 'Ready.');
     }
@@ -1989,9 +2104,10 @@ window.lol9k1MinigolfPacks = (function () {
 
     // ---------------------------------------------------------------- map editor
     // Plays a single hole, as it is in the editor, for this many hot seat players. Nothing is saved.
-    function testHole(def, count) {
+    // onFinish (optional) is told whether somebody holed out, for the editor to know the hole can be holed.
+    function testHole(def, count, onFinish) {
         // the pack's holes come back when the test stops
-        testRun = {def, players: count, holes: testRun ? testRun.holes : HOLES};
+        testRun = {def, players: count, onFinish, holes: testRun ? testRun.holes : HOLES};
         HOLES = [def];
         players = Array.from({length: count}, (_, i) =>
             ({name: `Player ${i + 1}`, isMe: i === 0, color: COLORS[i % COLORS.length], scores: [], ball: newBall()}));
